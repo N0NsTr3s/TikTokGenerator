@@ -1,0 +1,55 @@
+# Used Styles
+Realistic
+Monochrome
+Whimsical
+Minimalist
+Renaissance
+Victorian
+Medieval Fantasy
+Photorealistic
+Dark Fantasy
+Illustrative
+Fantasy
+
+# Available Styles
+Hyper-Realism
+Cinematic
+Documentary
+Cartoon
+Manga
+Disney
+Pixar Style
+Artistic
+Painterly
+Impressionism
+Surrealism
+Abstract
+Sci-Fi
+Cyberpunk
+Historical
+Period
+Modern
+Flat Design
+Geometric
+Fantastical
+Fairy Tale
+Steampunk
+Pop Art
+Vintage
+Retro
+1950s Americana
+Art Deco
+Retro Futurism
+Experimental
+Conceptual
+Glitch Art
+Fractal Art
+Collage
+Mixed Media
+Hybrid
+Photomontage
+3D Render
+Pixel Art
+Anime
+Comic Book
+Ancient Civilizations
