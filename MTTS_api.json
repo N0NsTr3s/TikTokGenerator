@@ -1,0 +1,14 @@
+{
+  "24": {
+    "inputs": {
+      "voice": "en-US:Jenny(Female)",
+      "rate": 0,
+      "filename_prefix": "comfyUIVoice",
+      "text": "One of these libraries that is commonly used for image and video processing is OpenCV. The cv2 module is the main module in OpenCV that provides developers with an easy-to-use interface for working with image and video processing functions."
+    },
+    "class_type": "MicrosoftSpeech_TTS",
+    "_meta": {
+      "title": "MicrosoftSpeech_TTS"
+    }
+  }
+}

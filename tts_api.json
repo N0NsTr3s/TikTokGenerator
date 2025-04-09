@@ -1,0 +1,12 @@
+{
+  "10": {
+    "inputs": {
+      "text": "test12313qalnk",
+      "filename_prefix": "audio\\audio"
+    },
+    "class_type": "Generate Audio",
+    "_meta": {
+      "title": "Generate Audio"
+    }
+  }
+}

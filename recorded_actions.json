@@ -1,0 +1,26 @@
+[
+  {
+    "action": "goto",
+    "url": "chrome://new-tab-page/"
+  },
+  {
+    "action": "goto",
+    "url": "https://www.reddit.com/r/creepypasta/"
+  },
+  {
+    "action": "extract_links",
+    "selector": "article.w-full.m-0",
+    "description": "Extracted 5 links",
+    "exclude_last_url": false
+  },
+  {
+    "action": "goto",
+    "url": "https://www.reddit.com/r/creepypasta/comments/1jqqc5d/the_watcher_in_the_crowd/"
+  },
+  {
+    "action": "extract_text",
+    "selector": "p",
+    "description": "Extracted 1 text items",
+    "exclude_last_url": false
+  }
+]
