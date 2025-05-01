@@ -132,14 +132,32 @@ def main():
     # Split the content into sentences
     sentences = re.split(r'(?<=[.!?])\s+', content)
     import_custom_nodes()
+
     with torch.inference_mode():
         logger.info("Generating audio for the processed text with VOICE: " + custom_voice)
         microsoftspeech_tts = NODE_CLASS_MAPPINGS["MicrosoftSpeech_TTS"]()
         
         # Generate audio for each sentence
         for i, sentence in enumerate(sentences):
-            if not sentence.strip():  # Skip empty sentences
+            # Check and clean up multiple ending punctuation marks
+            if sentence.strip():
+                # First trim extra whitespace
+                sentence = sentence.strip()
+                
+                # Clean up ending punctuation with spaces between them (e.g., ". !")
+                sentence = re.sub(r'([.!?])(?:\s+[.!?])+$', r'\1', sentence)
+                
+                # Clean up multiple consecutive ending punctuation (e.g., "!!!" or "!?!")
+                sentence = re.sub(r'([.!?])[.!?]+$', r'\1', sentence)
+
+            if len(sentence) < 2: 
+                # Skip sentences that are too short
+                if len(sentence.strip()) < 2:
+                    logging.info(f"Skipping sentence {i + 1} - too short: '{sentence}'")
+                    continue
+            if not sentence.strip() or sentence==' ' or sentence=='' or sentence==None:  # Skip empty sentences
                 continue
+
             logging.info(f"Generating audio for sentence {i + 1}/{len(sentences)}: {sentence.strip()}")   
             filename_prefix = f"comfyUIVoiceTTK_sentence_"
             microsoftspeech_tts.text_2_audio(
