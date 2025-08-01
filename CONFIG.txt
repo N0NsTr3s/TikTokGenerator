@@ -5,7 +5,7 @@ output_directory=D:\ComfyUI_windows_portable\TikTokCreator\Output
 tiktok_account=
 voice=en-US:Steffan(Male)
 zoom_factor=2.0
-last_query=Sondaj CURS: George Simon pe primul loc la prezidențiale cu 29%, urmat de Crin Antonescu cu 22% și Nicușor Dan cu 18%. Victor Ponta ar avea 13%, mai mult decât Elena Lasconi
+last_query=
 last_workflow=generated_script.py
 main_add_minigame_to_video=True
 main_record_game=True
@@ -14,3 +14,4 @@ custom_add_minigame_to_video=True
 custom_record_game=True
 custom_selected_game=Random Game
 review_prompt=True
+
