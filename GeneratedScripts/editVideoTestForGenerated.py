@@ -147,7 +147,7 @@ def create_zoom_video(image_file, output_video, duration=10, fps=30, zoom_limit=
         "-loop", "1",                # Loop the image infinitely.
         "-i", image_file,
         "-vf", vf_filter,
-        "-c:v", "libx264",           # Use H.264 codec, can change to your hardware encoder if needed.
+        "-c:v", "libx264",           
         "-t", str(duration),         # Set the video duration.
         "-pix_fmt", "yuv420p",       # Ensure broad playback compatibility.
         output_video

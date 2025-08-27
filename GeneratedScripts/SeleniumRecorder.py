@@ -141,7 +141,8 @@ def run_scraper():
     options.add_argument("--start-maximized")
     
     # Use your default Chrome profile
-    user_data_dir = os.path.join(os.getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Profile 1")
+    localappdata = os.getenv("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+    user_data_dir = os.path.join(localappdata, "Google", "Chrome", "User Data", "Profile 1")
     options.add_argument(f"--user-data-dir={{user_data_dir}}")
     
     # Initialize the Chrome driver
@@ -398,7 +399,8 @@ if __name__ == "__main__":
         
         # Format the actions with proper indentation
         formatted_actions = "\n".join(action_code)
-        user_data_dir = os.path.join(os.getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Profile 1")
+        localappdata = os.getenv("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+        user_data_dir = os.path.join(localappdata, "Google", "Chrome", "User Data", "Profile 1")
         
         # Generate the final script
         script = script_template.format(
@@ -424,7 +426,8 @@ if __name__ == "__main__":
             options.add_argument("--start-maximized")
             
             # Use the default Chrome profile
-            user_data_dir = os.path.join(os.getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Profile 1")
+            localappdata = os.getenv("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+            user_data_dir = os.path.join(localappdata, "Google", "Chrome", "User Data", "Profile 1")
             options.add_argument(f"--user-data-dir={user_data_dir}")
             
             # Initialize the Chrome driver
@@ -486,6 +489,10 @@ if __name__ == "__main__":
         if not re.match(r'^https?://', url):
             raise ValueError(f"Invalid URL: {url}. URL must start with http:// or https://")
         
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
+        
         self.driver.get(url)
         self.actions.append({
             "action": "goto",
@@ -495,6 +502,9 @@ if __name__ == "__main__":
         time.sleep(2)  # Wait for page to load
     
     def click(self, selector: str, description: str = ""):
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
         """Click on an element and record the action."""
         element = WebDriverWait(self.driver, 10).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
@@ -515,6 +525,10 @@ if __name__ == "__main__":
     
     def fill(self, selector: str, value: str, description: str = ""):
         """Fill a form field and record the action."""
+
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
         element = WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, selector))
         )
@@ -530,6 +544,9 @@ if __name__ == "__main__":
     
     def wait_for_selector(self, selector: str, description: str = ""):
         """Wait for an element to be visible and record the action."""
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
         WebDriverWait(self.driver, 10).until(
             EC.visibility_of_element_located((By.CSS_SELECTOR, selector))
         )
@@ -542,6 +559,9 @@ if __name__ == "__main__":
 
     def extract_text(self, selector: str, description: str = ""):
         """Extract text from elements and record the data."""
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
         elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
         texts = []
         for element in elements:
@@ -564,17 +584,13 @@ if __name__ == "__main__":
         logger.info(f"Extracted {len(texts)} text items from {selector} {description}")
         return texts
     
-    def wait(self, seconds: float):
-        """Wait for a specified number of seconds."""
-        time.sleep(seconds)
-        self.actions.append({
-            "action": "wait",
-            "seconds": seconds
-        })
-        logger.info(f"Waited for {seconds} seconds")
+
     
     def screenshot(self, path: str):
         """Take a screenshot and save it."""
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
         self.driver.save_screenshot(path)
         self.actions.append({
             "action": "screenshot",
@@ -599,7 +615,11 @@ if __name__ == "__main__":
         logger.info(f"Saved actions to {filename}")
 
     def add_data_extraction_ui(self):
+        
         """Add UI controls for data extraction to the current page."""
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
         try:
             # Wait for the page to be fully loaded
             time.sleep(2)
@@ -1028,6 +1048,9 @@ if __name__ == "__main__":
     def _setup_browser_monitoring(self):
         """Set up monitoring for browser events."""
         # Monitor for URL changes
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
         self._last_url = self.driver.current_url
         
         # Add JavaScript to monitor events
@@ -1135,6 +1158,9 @@ if __name__ == "__main__":
 
     def extract_links(self, selector: str, description: str = ""):
         """Extract links from an element and record the data."""
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
         elements = self.driver.find_elements(By.CSS_SELECTOR, f"{selector} a")
         links = []
         visited_hrefs = set()  # Track links within this extraction
@@ -1174,6 +1200,9 @@ if __name__ == "__main__":
 
     def extract_images(self, selector: str, description: str = ""):
         """Extract images from an element and record the data."""
+        # Check if driver is initialized
+        if self.driver is None:
+            raise RuntimeError("Browser not started. Call start_browser() first.")
         elements = self.driver.find_elements(By.CSS_SELECTOR, f"{selector} img")
         images = []
         for element in elements:
@@ -1197,29 +1226,6 @@ if __name__ == "__main__":
         logger.info(f"Extracted {len(images)} images from {selector} {description}")
         return images
     
-    def extract_text(self, selector: str, description: str = ""):
-        """Extract text from an element and record the data."""
-        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-        texts = []
-        for element in elements:
-            text = element.text
-            texts.append(text.strip())
-        
-        data = {
-            "selector": selector,
-            "description": description,
-            "texts": texts
-        }
-        
-        self.data_collected.append(data)
-        self.actions.append({
-            "action": "extract_text",
-            "selector": selector,
-            "description": description
-        })
-        
-        logger.info(f"Extracted {len(texts)} text items from {selector} {description}")
-        return texts
     
     def wait(self, seconds: float):
         """Wait for a specified number of seconds."""
