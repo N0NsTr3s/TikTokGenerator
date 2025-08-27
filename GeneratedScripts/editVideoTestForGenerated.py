@@ -79,7 +79,7 @@ except Exception as e:
     logger.warning("Using default zoom factor")
     zoom_factor = 1.25
 
-zoom_factor = float(zoom_factor)
+zoom_factor = float(zoom_factor) # pyright: ignore[reportArgumentType]
 logger.info(f"Using zoom factor: {zoom_factor}")
 # Define global constants
   # Adjust this value as needed for the zoom effect
@@ -169,7 +169,7 @@ logger.info(f"Found {len(image_files)} image files.")
 # Get all audio files
 audio_files = []
 for filename in os.listdir(audio_dir):
-    if filename.lower().endswith('.mp3'):
+    if filename.lower().endswith('.wav'):
         audio_files.append(os.path.join(audio_dir, filename))
 audio_files.sort()
 if not audio_files:
@@ -208,18 +208,18 @@ def process_image(image_file, idx):
             create_zoom_video(
                 image_file=image_file,
                 output_video=clip_video,
-                duration=clip_duration,
+                duration=clip_duration, # pyright: ignore[reportArgumentType]
                 fps=60,
-                zoom_limit=zoom_factor,  # Using the zoom_factor from config
+                zoom_limit=zoom_factor,  # Using the zoom_factor from config # pyright: ignore[reportArgumentType]
                 resolution="1280x960"
             )
         else:
             create_zoom_video(
                 image_file=image_file,
                 output_video=clip_video,
-                duration=clip_duration,
+                duration=clip_duration, # pyright: ignore[reportArgumentType]
                 fps=60,
-                zoom_limit=zoom_factor,  # Using the zoom_factor from config
+                zoom_limit=zoom_factor,  # Using the zoom_factor from config # pyright: ignore[reportArgumentType]
                 resolution="1280x1920"
             )
             
@@ -271,7 +271,7 @@ subprocess.run(ffmpeg_concat, check=True)
 logger.info("Concatenated clips into video: %s", temp_video)
 
 # Concatenate all audio files and add to the concatenated video
-temp_audio_concat = os.path.join(temp_dir, "audio_combined.mp3")
+temp_audio_concat = os.path.join(temp_dir, "audio_combined.wav")
 
 # Create a file list for audio concatenation
 audio_concat_list = os.path.join(temp_dir, "audio_concat_list.txt")
@@ -574,3 +574,21 @@ final_output_path = os.path.join(output_dir, "final_video.mp4")
 import shutil
 shutil.move(final_temp, final_output_path)
 logger.info(f"Final video moved to: {final_output_path}")
+
+for image in image_dir:
+    if image.lower().endswith('.png') and 'ComfyUITikTok' in image:
+        try:
+            os.remove(image)
+            logger.info(f"Deleted image file: {image}")
+        except Exception as e:
+            logger.warning(f"Failed to delete image file {image}: {str(e)}")
+logger.info("Cleared Image dir!")
+
+for audio in audio_dir:
+    if audio.lower().endswith('.wav') and 'openaifm' in audio:
+        try:
+            os.remove(audio)
+            logger.info(f"Deleted image file: {audio}")
+        except Exception as e:
+            logger.warning(f"Failed to delete image file {audio}: {str(e)}")
+logger.info("Cleared Audio dir!")

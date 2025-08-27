@@ -57,6 +57,7 @@ def extract_key_info(text):
     filtered_words = [word.lower() for word in words if word.isalnum() and word.lower() not in stop_words]
     
     # Get part-of-speech tags
+    nltk.download('averaged_perceptron_tagger_eng')
     pos_tags = pos_tag(filtered_words)
     
     # Extract nouns and verbs

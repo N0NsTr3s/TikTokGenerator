@@ -147,8 +147,49 @@ except:
     time.sleep(1)
 
 time.sleep(2)
-WebDriverWait(driver, 60).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div/div/div[2]/div[2]/div/div/div/div[4]/div/button[1]')))
-driver.find_element(By.XPATH, '/html/body/div[1]/div/div/div[2]/div[2]/div/div/div/div[4]/div/button[1]').click()
+WebDriverWait(driver, 60).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div/div/div[2]/div[2]/div/div/div/div[5]/div/button[1]')))
+driver.find_element(By.XPATH, '/html/body/div[1]/div/div/div[2]/div[2]/div/div/div/div[5]/div/button[1]').click()
 
 time.sleep(3)
 
+driver.close()
+
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from helper import setup_script_logging
+# Configure logging
+
+logger = setup_script_logging('TikTokPosting')
+# Set up paths
+base_dir = os.getcwd()
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+# Locate image directory
+image_dir = os.path.join(os.path.dirname(parent_dir), "ComfyUI", "output")
+logger.info(image_dir)
+if not os.path.isdir(image_dir):
+    raise FileNotFoundError(f"Image directory not found: {image_dir}")
+
+# Locate audio directory (must be a subfolder of image_dir)
+audio_dir = os.path.join(image_dir, "audio")
+logger.info(audio_dir)
+if not os.path.isdir(audio_dir):
+    raise FileNotFoundError(f"Audio directory not found: {audio_dir}")
+
+for image in image_dir:
+    if image.lower().endswith('.png') and 'ComfyUITikTok' in image:
+        try:
+            os.remove(image)
+            logger.info(f"Deleted image file: {image}")
+        except Exception as e:
+            logger.warning(f"Failed to delete image file {image}: {str(e)}")
+logger.info("Cleared Image dir!")
+
+for audio in audio_dir:
+    if audio.lower().endswith('.wav') and 'openaifm' in audio:
+        try:
+            os.remove(audio)
+            logger.info(f"Deleted image file: {audio}")
+        except Exception as e:
+            logger.warning(f"Failed to delete image file {audio}: {str(e)}")
+logger.info("Cleared Audio dir!")

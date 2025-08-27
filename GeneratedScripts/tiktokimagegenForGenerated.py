@@ -45,10 +45,10 @@ def get_value_at_index(obj: Union[Sequence, Mapping], index: int) -> Any:
     try:
         return obj[index]
     except KeyError:
-        return obj["result"][index]
+        return obj["result"][index] # type: ignore
 
 
-def find_path(name: str, path: str = None) -> str:
+def find_path(name: str, path: str = None) -> str: # pyright: ignore[reportArgumentType]
     """
     Recursively looks at parent folders starting from the given path until it finds the given name.
     Returns the path as a Path object if found, or None otherwise.
@@ -68,7 +68,7 @@ def find_path(name: str, path: str = None) -> str:
 
     # If the parent directory is the same as the current directory, we've reached the root and stop the search
     if parent_directory == path:
-        return None
+        return None # type: ignore
 
     # Recursively call the function with the parent directory
     return find_path(name, parent_directory)

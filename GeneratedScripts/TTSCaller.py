@@ -13,11 +13,26 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument('--text', required=True)
+    p.add_argument('--text', help='Text to synthesize')
+    p.add_argument('--text-file', help='Path to file containing text to synthesize')
     p.add_argument('--voice', required=True)
     p.add_argument('--vibe', default='---')
     p.add_argument('--optional-vibe-text', default='')
     args = p.parse_args()
+    
+    # Get text from either --text or --text-file
+    if args.text_file:
+        try:
+            with open(args.text_file, 'r', encoding='utf-8') as f:
+                text_content = f.read()
+        except Exception as e:
+            print(f'Error reading text file: {e}', file=sys.stderr)
+            return 1
+    elif args.text:
+        text_content = args.text
+    else:
+        print('Either --text or --text-file must be provided', file=sys.stderr)
+        return 1
 
     # Load local OpenAITTS helper if present
     try:
@@ -46,7 +61,7 @@ def main() -> int:
 
         # Split text into sentences similar to MTTS_apiForGenerated.py
         import re
-        sentences = re.split(r'(?<=[.!?])\s+', args.text)
+        sentences = re.split(r'(?<=[.!?])\s+', text_content)
         any_success = False
         for i, sentence in enumerate(sentences):
             s = sentence.strip()
