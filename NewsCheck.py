@@ -56,7 +56,7 @@ def is_relevant(text, query):
 def google_search_extract(query, num_results=20):
     # Use google search to get a list of links for the query, excluding YouTube links
     print(f"Searching for: {query}")
-    links = [link for link in search(term=query, num_results=num_results, sleep_interval=2) if "youtube.com" not in link and any(len(word) >= 3 and word in link for word in query.split())]
+    links = [link for link in search(term=query, num_results=num_results, sleep_interval=2) if "youtube.com" not in link and any(len(word) >= 3 and word in link for word in query.split())] # pyright: ignore[reportOperatorIssue]
     print(f"Found {len(links)} links")
     results = {}
     successful_extractions = 0
@@ -155,9 +155,9 @@ if __name__ == "__main__":
     try:
         additional_data_request = client.chat.completions.create(
             model="dolphin3.0-llama3.1-8b@q3_k_s",
-            messages=conversation,
+            messages=conversation, # type: ignore
             stream=False
-        )
+        ) # type: ignore
         additional_data_needed = additional_data_request.choices[0].message.content.strip().split('\n')
         print(f"Additional data needed: {additional_data_needed}")
 
@@ -223,9 +223,9 @@ if __name__ == "__main__":
     try:
         final_response = client.chat.completions.create(
             model="dolphin3.0-llama3.1-8b@q3_k_s",
-            messages=conversation,
+            messages=conversation, # type: ignore
             stream=False
-        )
+        ) # type: ignore
         final_output = final_response.choices[0].message.content
         summary_index = final_output.find("Summary:")
         if summary_index != -1:

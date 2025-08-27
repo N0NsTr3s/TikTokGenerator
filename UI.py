@@ -35,6 +35,7 @@ class WorkerThread(QThread):
     update_log = Signal(str)
     finished = Signal(bool, str)
     progress_update = Signal(int)
+    request_review = Signal(str)  # Signal to request review dialog from main thread
     
     def __init__(self, function, args=None):
         super().__init__()
@@ -350,8 +351,41 @@ class TikTokCreatorApp(QMainWindow):
         except Exception as e:
             self.log(f"Error loading settings: {str(e)}")
             return False
+
+    def get_voice_vibe_settings(self):
+        """Get voice and vibe settings from CONFIG.txt or UI controls"""
+        try:
+            # First try to get from CONFIG.txt
+            voice = "Shimmer"  # default
+            vibe = "---"       # default
+            
+            if os.path.exists("CONFIG.txt"):
+                with open("CONFIG.txt", "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        if "=" in line:
+                            key, value = line.split("=", 1)
+                            key = key.strip().lower()
+                            value = value.strip()
+                            if key == "voice":
+                                voice = value
+                            elif key == "vibe":
+                                vibe = value
+            
+            # Fall back to UI controls if available
+            if hasattr(self, 'voice_combo') and self.voice_combo.currentText():
+                voice = self.voice_combo.currentText()
+            if hasattr(self, 'vibe_combo') and self.vibe_combo.currentText():
+                vibe = self.vibe_combo.currentText()
+                
+            return voice, vibe
+        except Exception as e:
+            self.log(f"Error getting voice/vibe settings: {str(e)}")
+            return "Shimmer", "---"
     def show_review_dialog(self, file_path):
-        """Show dialog for text review and open the file"""
+        """Show dialog for text review and open the file - must be called from main thread"""
         # Reset flag before showing the dialog
         self.review_confirmed = False
         
@@ -372,9 +406,6 @@ class TikTokCreatorApp(QMainWindow):
         # Set flag to indicate review is complete
         self.review_confirmed = True
         self.log("Text review confirmed by user")
-        
-        # Set flag to indicate review is complete
-        self.review_confirmed = True
         
     def setup_workflow_tab(self):
         layout = QVBoxLayout(self.workflow_tab)
@@ -1210,6 +1241,7 @@ class TikTokCreatorApp(QMainWindow):
         self.worker_thread.update_log.connect(self.log)
         self.worker_thread.progress_update.connect(self.progress_bar.setValue)
         self.worker_thread.finished.connect(self.workflow_finished)
+        self.worker_thread.request_review.connect(self.show_review_dialog)
         self.worker_thread.start()
         
         self.log(f"Started full workflow with query: {query}")
@@ -1232,7 +1264,15 @@ class TikTokCreatorApp(QMainWindow):
             
             # Count total steps for progress calculation
             remaining_scripts = []
-            remaining_scripts.append(r"GeneratedScripts\MTTS_apiForGenerated.py")
+            
+            # Get voice and vibe settings for TTSCaller
+            voice, vibe = self.get_voice_vibe_settings()
+            text_file = os.path.join(os.getcwd(), "processed.txt")
+            
+            # Add TTSCaller.py with proper arguments
+            remaining_scripts.append([sys.executable, r"GeneratedScripts\TTSCaller.py", 
+                                    "--text-file", text_file, "--voice", voice, "--vibe", vibe])
+            
             if add_minigame and record_game:
                 remaining_scripts.append([sys.executable, r"GeneratedScripts\tiktokimagegenForGenerated.py", "--add-minigame=True"])
                 remaining_scripts.append([sys.executable, r"GeneratedScripts\editVideoTestForGenerated.py", "--add-minigame=True"])
@@ -1352,8 +1392,8 @@ class TikTokCreatorApp(QMainWindow):
                 # Check if processed.txt exists
                 processed_file_path = os.path.join(os.getcwd(), "processed.txt")
                 if os.path.exists(processed_file_path):
-                    # Open the file with default text editor using a direct call
-                    self.show_review_dialog(processed_file_path)
+                    # Request review dialog from main thread
+                    self.worker_thread.request_review.emit(processed_file_path)
                     
                     # Wait for the dialog result with timeout
                     timeout = 300  # 5 minutes timeout
@@ -1365,12 +1405,6 @@ class TikTokCreatorApp(QMainWindow):
                         if time.time() - start_time > timeout:
                             self.worker_thread.update_log.emit("Timeout waiting for text review. Continuing workflow...")
                             break
-                        time.sleep(0.5)
-                    
-                    # Wait for the dialog result
-                    while not hasattr(self, "review_confirmed") or not self.review_confirmed:
-                        if self.worker_thread.stop_requested:
-                            return False
                         time.sleep(0.5)
                     
                     # Reset the confirmation flag
@@ -1573,7 +1607,7 @@ class TikTokCreatorApp(QMainWindow):
             return False
 
     def _run_speech_generation(self):
-        """Execute the MTTS_apiForGenerated.py script for text-to-speech conversion."""
+        """Execute the TTSCaller.py script for text-to-speech conversion."""
         try:
             if not self.worker_thread:
                 return False
@@ -1588,19 +1622,14 @@ class TikTokCreatorApp(QMainWindow):
             script_dir = os.path.dirname(os.path.abspath(__file__))
             script_path = os.path.join(script_dir, "GeneratedScripts", "TTSCaller.py")
 
-            # Read processed text to synthesize
+            # Use processed.txt file path instead of reading content to avoid command line length issues
             text_file = os.path.join(os.getcwd(), "processed.txt")
-            try:
-                with open(text_file, 'r', encoding='utf-8') as tf:
-                    text_content = tf.read()
-            except Exception:
-                text_content = ""
 
-            voice = self.voice_combo.currentText() if hasattr(self, 'voice_combo') else "Shimmer"
-            vibe = self.vibe_combo.currentText() if hasattr(self, 'vibe_combo') else "---"
+            # Get voice and vibe settings from CONFIG.txt or UI
+            voice, vibe = self.get_voice_vibe_settings()
 
             process = subprocess.Popen(
-                [sys.executable, script_path, "--text", text_content, "--voice", voice, "--vibe", vibe],
+                [sys.executable, script_path, "--text-file", text_file, "--voice", voice, "--vibe", vibe],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 encoding='utf-8',
@@ -1982,8 +2011,8 @@ class TikTokCreatorApp(QMainWindow):
             workflow_scripts = []
             for file in os.listdir(scripts_dir):
                 excluded_files = ["tiktokimagegenForGenerated.py", "editVideoTestForGenerated.py", 
-                                 "MTTS_apiForGenerated.py", "parsetextForGenerated.py", 
-                                 "postForGenerated.py", "SeleniumRecorder.py"]
+                                  "parsetextForGenerated.py", 
+                                 "postForGenerated.py", "SeleniumRecorder.py", "TTSCaller.py", "OpenAITTS.py"]
                 if file.endswith(".py") and not file.startswith("__") and file not in excluded_files:
                     workflow_scripts.append(file)
             
@@ -2024,6 +2053,7 @@ class TikTokCreatorApp(QMainWindow):
             self.worker_thread.update_log.connect(self.log)
             self.worker_thread.progress_update.connect(self.workflow_progress.setValue)
             self.worker_thread.finished.connect(self.workflow_finished)
+            self.worker_thread.request_review.connect(self.show_review_dialog)
             self.worker_thread.start()
         
         self.log(f"Started workflow: {selected_workflow}")
@@ -2044,8 +2074,13 @@ class TikTokCreatorApp(QMainWindow):
             # Define remaining scripts to calculate progress properly
             remaining_scripts = []
             
-            # Add MTTS_apiForGenerated.py
-            remaining_scripts.append(r"GeneratedScripts\MTTS_apiForGenerated.py")
+            # Get voice and vibe settings for TTSCaller
+            voice, vibe = self.get_voice_vibe_settings()
+            text_file = os.path.join(os.getcwd(), "processed.txt")
+            
+            # Add TTSCaller.py with proper arguments
+            remaining_scripts.append([sys.executable, r"GeneratedScripts\TTSCaller.py", 
+                                    "--text-file", text_file, "--voice", voice, "--vibe", vibe])
             
             # Add image generation and video editing scripts with proper arguments
             if add_minigame and record_game:
@@ -2159,17 +2194,11 @@ class TikTokCreatorApp(QMainWindow):
                 # Check if processed.txt exists
                 processed_file_path = os.path.join(os.getcwd(), "processed.txt")
                 if os.path.exists(processed_file_path):
-                    # Open the file with default text editor
-                    self.worker_thread.update_log.emit("Opening processed.txt for review...")
-                    
-                    # We need to inform the user in the main thread - use a simple approach
-                    self.worker_thread.update_log.emit("Opening processed.txt for review...")
-                    
-                    # Call show_review_dialog directly since we're already in a worker thread
-                    self.show_review_dialog(processed_file_path)
+                    # Request review dialog from main thread
+                    self.worker_thread.request_review.emit(processed_file_path)
                     
                     # Wait for the dialog result
-                    while not hasattr(self, "review_confirmed") or not self.review_confirmed:
+                    while not self.review_confirmed:
                         if self.worker_thread.stop_requested:
                             return False
                         time.sleep(0.5)

@@ -192,7 +192,7 @@ def parse_with_AI():
     time.sleep(10)
     client = OpenAI(base_url='http://localhost:1234/v1', api_key="Nothing here")
     subprocess.run("lms server start")
-    subprocess.run("lms load cognitivecomputations/Dolphin3.0-Llama3.1-8B-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
+    subprocess.run("lms load roleplaiapp/Dolphin3.0-Llama3.1-8B-Q3_K_S-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
 
     def estimate_tokens(text):
         # Estimate tokens by counting words
@@ -412,7 +412,7 @@ if __name__ == "__main__":
         
         # Format the actions with proper indentation
         formatted_actions = "\n".join(action_code)
-        user_data_dir = os.path.join(os.getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Profile 1")
+        user_data_dir = os.path.join(os.getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Profile 1") # type: ignore
         
         # Generate the final script
         script = script_template.format(
@@ -438,7 +438,7 @@ if __name__ == "__main__":
             options.add_argument("--start-maximized")
             
             # Use the default Chrome profile
-            user_data_dir = os.path.join(os.getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Profile 1")
+            user_data_dir = os.path.join(os.getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Profile 1") # type: ignore
             options.add_argument(f"--user-data-dir={user_data_dir}")
             
             # Initialize the Chrome driver
@@ -500,7 +500,7 @@ if __name__ == "__main__":
         if not re.match(r'^https?://', url):
             raise ValueError(f"Invalid URL: {url}. URL must start with http:// or https://")
         
-        self.driver.get(url)
+        self.driver.get(url) # type: ignore
         self.actions.append({
             "action": "goto",
             "url": url
@@ -510,7 +510,7 @@ if __name__ == "__main__":
     
     def click(self, selector: str, description: str = ""):
         """Click on an element and record the action."""
-        element = WebDriverWait(self.driver, 10).until(
+        element = WebDriverWait(self.driver, 10).until( # type: ignore
             EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
         )
         element.click()
@@ -529,7 +529,7 @@ if __name__ == "__main__":
     
     def fill(self, selector: str, value: str, description: str = ""):
         """Fill a form field and record the action."""
-        element = WebDriverWait(self.driver, 10).until(
+        element = WebDriverWait(self.driver, 10).until( # type: ignore
             EC.presence_of_element_located((By.CSS_SELECTOR, selector))
         )
         element.clear()
@@ -544,7 +544,7 @@ if __name__ == "__main__":
     
     def wait_for_selector(self, selector: str, description: str = ""):
         """Wait for an element to be visible and record the action."""
-        WebDriverWait(self.driver, 10).until(
+        WebDriverWait(self.driver, 10).until( # type: ignore
             EC.visibility_of_element_located((By.CSS_SELECTOR, selector))
         )
         self.actions.append({
@@ -554,42 +554,10 @@ if __name__ == "__main__":
         })
         logger.info(f"Waited for {selector} {description}")
 
-    def extract_text(self, selector: str, description: str = ""):
-        """Extract text from elements and record the data."""
-        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-        texts = []
-        for element in elements:
-            text = element.text
-            texts.append(text.strip())
-        
-        data = {
-            "selector": selector,
-            "description": description,
-            "texts": texts
-        }
-        
-        self.data_collected.append(data)
-        self.actions.append({
-            "action": "extract_text",
-            "selector": selector,
-            "description": description
-        })
-        
-        logger.info(f"Extracted {len(texts)} text items from {selector} {description}")
-        return texts
-    
-    def wait(self, seconds: float):
-        """Wait for a specified number of seconds."""
-        time.sleep(seconds)
-        self.actions.append({
-            "action": "wait",
-            "seconds": seconds
-        })
-        logger.info(f"Waited for {seconds} seconds")
     
     def screenshot(self, path: str):
         """Take a screenshot and save it."""
-        self.driver.save_screenshot(path)
+        self.driver.save_screenshot(path) # pyright: ignore[reportOptionalMemberAccess]
         self.actions.append({
             "action": "screenshot",
             "path": path
@@ -891,7 +859,7 @@ if __name__ == "__main__":
             """
             
             # Execute the JavaScript
-            self.driver.execute_script(js_code)
+            self.driver.execute_script(js_code) # type: ignore
             
             # Add event listener for extraction operations
             self._setup_extraction_poller()
@@ -901,16 +869,16 @@ if __name__ == "__main__":
             try:
                 # First try to dismiss any open alerts
                 try:
-                    alert = self.driver.switch_to.alert
+                    alert = self.driver.switch_to.alert # type: ignore
                     alert.accept()
                     logger.info("Dismissed open alert")
                 except:
                     pass
                     
-                ui_present = self.driver.execute_script("return !!document.getElementById('data-extraction-panel');")
+                ui_present = self.driver.execute_script("return !!document.getElementById('data-extraction-panel');") # type: ignore
                 if not ui_present:
                     logger.info("Data extraction UI not found, trying to add it again.")
-                    self.driver.execute_script(js_code)
+                    self.driver.execute_script(js_code) # pyright: ignore[reportOptionalMemberAccess]
             except Exception as e:
                 logger.error(f"Error checking data extraction UI presence: {e}")
         except Exception as e:
@@ -918,10 +886,10 @@ if __name__ == "__main__":
 
         # Check if the UI is present, if not, try to load it again
         try:
-            ui_present = self.driver.execute_script("return !!document.getElementById('data-extraction-panel');")
+            ui_present = self.driver.execute_script("return !!document.getElementById('data-extraction-panel');") # pyright: ignore[reportOptionalMemberAccess]
             if not ui_present:
                 logger.info("Data extraction UI not found, trying to add it again.")
-                self.driver.execute_script(js_code)
+                self.driver.execute_script(js_code) # pyright: ignore[reportOptionalMemberAccess]
         except Exception as e:
             logger.error(f"Error checking data extraction UI presence: {e}")
 
@@ -1087,10 +1055,10 @@ if __name__ == "__main__":
     def _setup_browser_monitoring(self):
         """Set up monitoring for browser events."""
         # Monitor for URL changes
-        self._last_url = self.driver.current_url
+        self._last_url = self.driver.current_url # pyright: ignore[reportOptionalMemberAccess]
         
-        # Add JavaScript to monitor events
-        self.driver.execute_script("""
+        # Add JavaScript to monitor events 
+        self.driver.execute_script("""  
             // Monitor clicks
             document.addEventListener('click', function(e) {
                 if (e.target.closest('#data-extraction-panel')) return;
@@ -1194,7 +1162,7 @@ if __name__ == "__main__":
 
     def extract_links(self, selector: str, description: str = ""):
         """Extract links from an element and record the data."""
-        elements = self.driver.find_elements(By.CSS_SELECTOR, f"{selector} a")
+        elements = self.driver.find_elements(By.CSS_SELECTOR, f"{selector} a") # pyright: ignore[reportOptionalMemberAccess]
         links = []
         visited_hrefs = set()  # Track links within this extraction
         
@@ -1233,7 +1201,7 @@ if __name__ == "__main__":
 
     def extract_images(self, selector: str, description: str = ""):
         """Extract images from an element and record the data."""
-        elements = self.driver.find_elements(By.CSS_SELECTOR, f"{selector} img")
+        elements = self.driver.find_elements(By.CSS_SELECTOR, f"{selector} img") # pyright: ignore[reportOptionalMemberAccess]
         images = []
         for element in elements:
             src = element.get_attribute("src")
@@ -1258,7 +1226,7 @@ if __name__ == "__main__":
     
     def extract_text(self, selector: str, description: str = ""):
         """Extract text from an element and record the data."""
-        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+        elements = self.driver.find_elements(By.CSS_SELECTOR, selector) # pyright: ignore[reportOptionalMemberAccess]
         texts = []
         for element in elements:
             text = element.text

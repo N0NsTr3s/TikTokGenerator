@@ -1,13 +1,13 @@
 # TikTok Creator Configuration File
-# Last saved: 2025-08-26 22:24:24
+# Last saved: 2025-08-27 23:56:45
 
-output_directory=D:\ComfyUI_windows_portable\TikTokCreator\Output
+output_directory=D:\TikTokCreator\TikTokCreator\Output
 tiktok_account=
 voice=Ballad
-vibe=Sincere
+vibe=Dramatic
 zoom_factor=2.0
-last_query=Geroge Simion fuge de sustinatorii sai din U.K
-last_workflow=GroundNews.py
+last_query=
+last_workflow=generated_script.py
 main_add_minigame_to_video=True
 main_record_game=True
 main_selected_game=Random Game
