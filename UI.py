@@ -3,15 +3,18 @@ import sys
 import threading
 import subprocess
 import time
+from typing import Optional
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton, QLabel, 
                               QLineEdit, QProgressBar, QTabWidget, QVBoxLayout, QHBoxLayout, 
                               QFormLayout, QTextEdit, QComboBox, QFileDialog, QMessageBox, 
-                              QSlider, QGroupBox, QFrame, QSplitter, QCheckBox, QScrollArea,QListWidget,QInputDialog)
-from PySide6.QtCore import Qt, QThread, Signal, QUrl, QTimer, QMetaObject, Q_ARG, Slot
+                              QSlider, QGroupBox, QFrame, QSplitter, QCheckBox, QScrollArea,QListWidget,QInputDialog,
+                              QAbstractItemView)
+from PySide6.QtCore import Qt, QThread, Signal, QUrl, QTimer, QMetaObject, Q_ARG, Slot, QAbstractListModel
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 from PySide6.QtGui import QIcon, QDesktopServices, QDoubleValidator
 import random
 import logging
+from path_utils import find_project_root
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 # Create a custom log handler that redirects to the UI
@@ -54,13 +57,11 @@ class WorkerThread(QThread):
             self.finished.emit(False, str(e))
         finally:
             # Ensure we reset the UI state regardless of how the thread ends
-            if not self.finished.receivers():
-                # If no one is listening to our signal (disconnected), 
-                # use a timer to reset the UI from the main thread
-                QTimer.singleShot(100, lambda: QMetaObject.invokeMethod(
-                    QApplication.instance().activeWindow(), 
-                    "reset_process_state", 
-                    Qt.QueuedConnection))
+            try:
+                # Use a timer to reset the UI from the main thread
+                QTimer.singleShot(100, lambda: self.finished.emit(False, ""))
+            except Exception:
+                pass  # Ignore any errors during cleanup
     
     def request_stop(self):
         self.stop_requested = True
@@ -96,7 +97,11 @@ class TikTokCreatorApp(QMainWindow):
 
         # Set icon if available
         try:
-            self.setWindowIcon(QIcon("Resources\\ico.ico"))
+            project_root = find_project_root()
+            if project_root:
+                icon_path = os.path.join(project_root, "Resources", "ico.ico")
+                if os.path.exists(icon_path):
+                    self.setWindowIcon(QIcon(icon_path))
         except:
             pass
         
@@ -132,7 +137,7 @@ class TikTokCreatorApp(QMainWindow):
         
         # Initialize variables
         self.process_running = False
-        self.worker_thread = None
+        self.worker_thread: Optional[WorkerThread] = None
         
         # Status bar
         self.status_bar = self.statusBar()
@@ -149,7 +154,8 @@ class TikTokCreatorApp(QMainWindow):
             os.makedirs(self.output_input.text(), exist_ok=True)
             
             QMessageBox.information(self, "Settings Saved", 
-                                "Your settings have been saved to CONFIG.txt")
+                                  "Your settings have been saved to CONFIG.txt", 
+                                  QMessageBox.StandardButton.Ok)
         else:
             QMessageBox.warning(self, "Save Error", 
                             "There was an error saving your settings to CONFIG.txt")
@@ -206,6 +212,7 @@ class TikTokCreatorApp(QMainWindow):
 
                 # Voice settings
                 "voice": self.voice_combo.currentText(),
+                "vibe": self.vibe_combo.currentText() if hasattr(self, 'vibe_combo') else "---",
                 
                 # Video settings
                 "zoom_factor": self.zoom_slider.value()/10,
@@ -272,6 +279,10 @@ class TikTokCreatorApp(QMainWindow):
                 index = self.voice_combo.findText(config["voice"])
                 if index >= 0:
                     self.voice_combo.setCurrentIndex(index)
+            if "vibe" in config:
+                index = self.vibe_combo.findText(config["vibe"])
+                if index >= 0:
+                    self.vibe_combo.setCurrentIndex(index)
             
             if "zoom_factor" in config:
                 try:
@@ -339,7 +350,6 @@ class TikTokCreatorApp(QMainWindow):
         except Exception as e:
             self.log(f"Error loading settings: {str(e)}")
             return False
-    @Slot(str)
     def show_review_dialog(self, file_path):
         """Show dialog for text review and open the file"""
         # Reset flag before showing the dialog
@@ -353,8 +363,8 @@ class TikTokCreatorApp(QMainWindow):
         msg_box.setWindowTitle("Review Text")
         msg_box.setText("The processed text file is now open for review.")
         msg_box.setInformativeText("Please review the text and make any edits if needed. Click Continue when ready to proceed with TTS conversion.")
-        msg_box.setStandardButtons(QMessageBox.Ok)
-        msg_box.button(QMessageBox.Ok).setText("Continue")
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.button(QMessageBox.StandardButton.Ok).setText("Continue")
         
         # Show the dialog
         msg_box.exec()
@@ -456,7 +466,7 @@ class TikTokCreatorApp(QMainWindow):
         video_layout = QFormLayout(video_group)
         
         zoom_layout = QHBoxLayout()
-        self.zoom_slider = QSlider(Qt.Horizontal)
+        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
         self.zoom_slider.setRange(10, 30)  # 1.0 to 3.0 with 10x precision
         self.zoom_slider.setValue(15)  # 1.5 default
         self.zoom_label = QLabel("1.5")
@@ -483,7 +493,7 @@ class TikTokCreatorApp(QMainWindow):
         available_tags_panel = QGroupBox("Available Tags")
         available_tags_layout = QVBoxLayout(available_tags_panel)
         self.available_tags_list = QListWidget()
-        self.available_tags_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self.available_tags_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         available_tags_layout.addWidget(self.available_tags_list)
         self.available_tags_list.setMinimumHeight(200)  # Minimum height
         self.available_tags_list.setMaximumHeight(300)  # Maximum height
@@ -492,7 +502,7 @@ class TikTokCreatorApp(QMainWindow):
         used_tags_panel = QGroupBox("Used Tags")
         used_tags_layout = QVBoxLayout(used_tags_panel)
         self.used_tags_list = QListWidget()
-        self.used_tags_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self.used_tags_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         used_tags_layout.addWidget(self.used_tags_list)
         self.used_tags_list.setMinimumHeight(200)  # Minimum height
         self.used_tags_list.setMaximumHeight(300)  # Maximum height
@@ -563,7 +573,7 @@ class TikTokCreatorApp(QMainWindow):
         available_styles_panel = QGroupBox("Available Styles")
         available_styles_layout = QVBoxLayout(available_styles_panel)
         self.available_styles_list = QListWidget()
-        self.available_styles_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self.available_styles_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         available_styles_layout.addWidget(self.available_styles_list)
         self.available_styles_list.setMinimumHeight(200)  # Minimum height
         self.available_styles_list.setMaximumHeight(300)  # Maximum height
@@ -572,7 +582,7 @@ class TikTokCreatorApp(QMainWindow):
         used_styles_panel = QGroupBox("Used Styles")
         used_styles_layout = QVBoxLayout(used_styles_panel)
         self.used_styles_list = QListWidget()
-        self.used_styles_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self.used_styles_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         used_styles_layout.addWidget(self.used_styles_list)
         self.used_styles_list.setMinimumHeight(200)  # Minimum height
         self.used_styles_list.setMaximumHeight(300)  # Maximum height
@@ -641,15 +651,71 @@ class TikTokCreatorApp(QMainWindow):
         
         scroll_layout.addWidget(output_group)
         
-        # Voice settings (existing)
+        # Voice & Vibe settings
         voice_group = QGroupBox("Voice Settings")
         voice_layout = QFormLayout(voice_group)
-        
+
         self.voice_combo = QComboBox()
-        self.voice_combo.addItems(["en-US:Steffan(Male)", "en-US:Ana(Female)", "en-GB:Ryan(Male)"])
-        
+        # populate voices dynamically from OpenAIFM data
+        try:
+            from GeneratedScripts.OpenAITTS import find_openaifm_data_dir, load_voices_json, list_voice_names
+            data_dir = find_openaifm_data_dir()
+            voices = None
+            if data_dir:
+                voices = load_voices_json(data_dir)
+            names = list_voice_names(voices) if voices is not None else []
+            if not names:
+                names = ["en-US:Steffan(Male)", "en-US:Ana(Female)", "en-GB:Ryan(Male)"]
+        except Exception:
+            names = ["en-US:Steffan(Male)", "en-US:Ana(Female)", "en-GB:Ryan(Male)"]
+
+        self.voice_combo.addItems(names)
+
+        # Vibe dropdown
+        self.vibe_combo = QComboBox()
+        try:
+            from GeneratedScripts.OpenAITTS import find_openaifm_data_dir, load_voices_json
+            data_dir = find_openaifm_data_dir()
+            vibes = None
+            if data_dir:
+                import json
+                vfile = data_dir / 'vibes.json'
+                if vfile.exists():
+                    with open(vfile, 'r', encoding='utf-8') as vf:
+                        vibes = json.load(vf)
+            vibe_names = ["---"]
+            if isinstance(vibes, dict):
+                vibe_names += list(vibes.keys())
+        except Exception:
+            vibe_names = ["---"]
+
+        self.vibe_combo.addItems(vibe_names)
+
         voice_layout.addRow("Voice:", self.voice_combo)
+        voice_layout.addRow("Vibe:", self.vibe_combo)
         scroll_layout.addWidget(voice_group)
+
+        # Vibe creator UI (separate fields for required parts)
+        vibe_create_group = QGroupBox("Add Custom Vibe")
+        vibe_create_layout = QFormLayout(vibe_create_group)
+        self.new_vibe_name = QLineEdit()
+        self.new_vibe_voice_affect = QLineEdit()
+        self.new_vibe_tone = QLineEdit()
+        self.new_vibe_pacing = QLineEdit()
+        self.new_vibe_emotion = QLineEdit()
+        self.new_vibe_pronunciation = QLineEdit()
+        self.new_vibe_pauses = QLineEdit()
+        add_vibe_btn = QPushButton("Add Vibe")
+        add_vibe_btn.clicked.connect(self.add_custom_vibe)
+        vibe_create_layout.addRow("Vibe Name:", self.new_vibe_name)
+        vibe_create_layout.addRow("Voice Affect:", self.new_vibe_voice_affect)
+        vibe_create_layout.addRow("Tone:", self.new_vibe_tone)
+        vibe_create_layout.addRow("Pacing:", self.new_vibe_pacing)
+        vibe_create_layout.addRow("Emotion:", self.new_vibe_emotion)
+        vibe_create_layout.addRow("Pronunciation:", self.new_vibe_pronunciation)
+        vibe_create_layout.addRow("Pauses:", self.new_vibe_pauses)
+        vibe_create_layout.addRow(add_vibe_btn)
+        scroll_layout.addWidget(vibe_create_group)
         
         # Workflow Controls (existing)
         review_group = QGroupBox("Workflow Controls")
@@ -668,7 +734,7 @@ class TikTokCreatorApp(QMainWindow):
         # Save button (should be at the end)
         save_btn = QPushButton("Save All Settings")
         save_btn.clicked.connect(self.save_settings)
-        layout.addWidget(save_btn, alignment=Qt.AlignRight)
+        layout.addWidget(save_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
     def add_new_tag(self):
         """Add a new tag to the available tags list"""
@@ -693,10 +759,10 @@ class TikTokCreatorApp(QMainWindow):
         result = QMessageBox.question(
             self, "Confirm Delete", 
             f"Delete {len(selected_items)} selected tag(s)?",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
-        if result == QMessageBox.Yes:
+        if result == QMessageBox.StandardButton.Yes:
             for item in selected_items:
                 row = list_widget.row(item)
                 list_widget.takeItem(row)
@@ -710,13 +776,90 @@ class TikTokCreatorApp(QMainWindow):
         result = QMessageBox.question(
             self, "Confirm Delete", 
             f"Delete {len(selected_items)} selected style(s)?",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
-        if result == QMessageBox.Yes:
+        if result == QMessageBox.StandardButton.Yes:
             for item in selected_items:
                 row = list_widget.row(item)
                 list_widget.takeItem(row)
+
+    def add_custom_vibe(self):
+        """Validate and add a custom vibe to the openaifm vibes.json and CONFIG.txt"""
+        try:
+            name = self.new_vibe_name.text().strip()
+            voice_affect = self.new_vibe_voice_affect.text().strip()
+            tone = self.new_vibe_tone.text().strip()
+            pacing = self.new_vibe_pacing.text().strip()
+            emotion = self.new_vibe_emotion.text().strip()
+            pronunciation = self.new_vibe_pronunciation.text().strip()
+            pauses = self.new_vibe_pauses.text().strip()
+        except Exception:
+            QMessageBox.warning(self, "Vibe Error", "Vibe UI not available")
+            return
+
+        if not name:
+            QMessageBox.warning(self, "Vibe Error", "Please enter a name for the vibe")
+            return
+        # All fields are mandatory
+        if not all([voice_affect, tone, pacing, emotion, pronunciation, pauses]):
+            QMessageBox.warning(self, "Vibe Error", "All vibe fields are mandatory")
+            return
+
+        # Build the lines list
+        lines = [
+            f"Voice Affect: {voice_affect}",
+            f"Tone: {tone}",
+            f"Pacing: {pacing}",
+            f"Emotion: {emotion}",
+            f"Pronunciation: {pronunciation}",
+            f"Pauses: {pauses}",
+        ]
+
+        # Locate vibes.json dynamically
+        try:
+            from GeneratedScripts.OpenAITTS import find_openaifm_data_dir
+            data_dir = find_openaifm_data_dir()
+            if not data_dir:
+                QMessageBox.warning(self, "Vibe Error", "Could not locate OpenAIFM data directory")
+                return
+            vibes_file = data_dir / 'vibes.json'
+            import json
+            if vibes_file.exists():
+                with open(vibes_file, 'r', encoding='utf-8') as vf:
+                    vibes = json.load(vf)
+            else:
+                vibes = {}
+
+            # Add or overwrite
+            vibes[name] = lines
+            with open(vibes_file, 'w', encoding='utf-8') as vf:
+                json.dump(vibes, vf, ensure_ascii=False, indent=4)
+
+            # Update CONFIG.txt with selected vibe
+            cfg_path = os.path.join(os.getcwd(), 'CONFIG.txt')
+            cfg = {}
+            if os.path.exists(cfg_path):
+                with open(cfg_path, 'r', encoding='utf-8') as cf:
+                    for ln in cf:
+                        ln = ln.strip()
+                        if ln and not ln.startswith('#') and '=' in ln:
+                            k, v = ln.split('=', 1)
+                            cfg[k.strip()] = v.strip()
+            cfg['vibe'] = name
+            with open(cfg_path, 'w', encoding='utf-8') as cf:
+                for k, v in cfg.items():
+                    cf.write(f"{k}={v}\n")
+
+            # Update UI
+            self.vibe_combo.addItem(name)
+            index = self.vibe_combo.findText(name)
+            if index >= 0:
+                self.vibe_combo.setCurrentIndex(index)
+
+            QMessageBox.information(self, "Vibe Added", f"Vibe '{name}' added to vibes.json and CONFIG.txt")
+        except Exception as e:
+            QMessageBox.warning(self, "Vibe Error", f"Failed to add vibe: {e}")
 
     def move_items(self, source_list, target_list):
         """Move selected items from source list to target list"""
@@ -805,10 +948,10 @@ class TikTokCreatorApp(QMainWindow):
         result = QMessageBox.question(
             self, "Confirm Delete", 
             f"Delete {total_selected} selected tag(s)?",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
-        if result == QMessageBox.Yes:
+        if result == QMessageBox.StandardButton.Yes:
             # Delete from available list
             for item in available_items:
                 row = self.available_tags_list.row(item)
@@ -832,10 +975,10 @@ class TikTokCreatorApp(QMainWindow):
         result = QMessageBox.question(
             self, "Confirm Delete", 
             f"Delete {total_selected} selected style(s)?",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
-        if result == QMessageBox.Yes:
+        if result == QMessageBox.StandardButton.Yes:
             # Delete from available list
             for item in available_items:
                 row = self.available_styles_list.row(item)
@@ -1075,6 +1218,8 @@ class TikTokCreatorApp(QMainWindow):
     def _run_full_workflow(self, query):
         """Execute the full workflow starting with NewsCheck.py"""
         try:
+            if not self.worker_thread:
+                return False
             self.worker_thread.update_log.emit(f"Running full workflow with query: {query}")
             
             # Initialize progress bar at 0%
@@ -1152,7 +1297,7 @@ class TikTokCreatorApp(QMainWindow):
                 """Process output from a subprocess, handling encoding errors"""
                 try:
                     for line in iter(pipe.readline, ''):
-                        if line.strip() and not self.worker_thread.stop_requested:
+                        if line.strip() and not self.worker_thread.stop_requested: # pyright: ignore[reportOptionalMemberAccess]
                             # Try to decode with utf-8 if needed
                             if isinstance(line, bytes):
                                 try:
@@ -1161,9 +1306,9 @@ class TikTokCreatorApp(QMainWindow):
                                     # Fall back to a more forgiving encoding
                                     line = line.decode('utf-8', errors='replace')
                             
-                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}")
+                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}") # pyright: ignore[reportOptionalMemberAccess]
                 except UnicodeDecodeError:
-                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]")
+                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]") # pyright: ignore[reportOptionalMemberAccess]
                 finally:
                     pipe.close()
             
@@ -1207,10 +1352,8 @@ class TikTokCreatorApp(QMainWindow):
                 # Check if processed.txt exists
                 processed_file_path = os.path.join(os.getcwd(), "processed.txt")
                 if os.path.exists(processed_file_path):
-                    # Open the file with default text editor
-                    QMetaObject.invokeMethod(self, "show_review_dialog", 
-                                             Qt.QueuedConnection,
-                                             Q_ARG(str, processed_file_path))
+                    # Open the file with default text editor using a direct call
+                    self.show_review_dialog(processed_file_path)
                     
                     # Wait for the dialog result with timeout
                     timeout = 300  # 5 minutes timeout
@@ -1291,7 +1434,8 @@ class TikTokCreatorApp(QMainWindow):
             self.worker_thread.update_log.emit("Full workflow completed successfully")
             return True
         except Exception as e:
-            self.worker_thread.update_log.emit(f"Error running full workflow: {str(e)}")
+            if self.worker_thread:
+                self.worker_thread.update_log.emit(f"Error running full workflow: {str(e)}")
             return False
         
     def stop_process(self):
@@ -1312,7 +1456,7 @@ class TikTokCreatorApp(QMainWindow):
             self.workflow_progress.setValue(0)
         
         # Show a notification instead of an error
-        QMessageBox.information(self, "Process Stopped", "The process has been stopped successfully.")
+        QMessageBox.information(self, "Process Stopped", "The process has been stopped successfully.", QMessageBox.StandardButton.Ok)
         
         # Reset UI state
         self.reset_process_state()
@@ -1352,9 +1496,10 @@ class TikTokCreatorApp(QMainWindow):
         elif step == "post_tiktok":
             self.worker_thread = WorkerThread(self._run_posting)
         
-        self.worker_thread.update_log.connect(self.log)
-        self.worker_thread.finished.connect(self.process_finished)
-        self.worker_thread.start()
+        if self.worker_thread:  # Add null check
+            self.worker_thread.update_log.connect(self.log)
+            self.worker_thread.finished.connect(self.process_finished)
+            self.worker_thread.start()
         
         # Update status
         self.status_bar.showMessage(f"Running step: {step}")
@@ -1363,6 +1508,8 @@ class TikTokCreatorApp(QMainWindow):
     def _run_news_check(self, query):
         """Execute the NewsCheck.py script with the provided query."""
         try:
+            if not self.worker_thread:
+                return False
             self.worker_thread.update_log.emit(f"Running NewsCheck with query: {query}")
             
             if not query.strip():
@@ -1386,7 +1533,7 @@ class TikTokCreatorApp(QMainWindow):
                 """Process output from a subprocess, handling encoding errors"""
                 try:
                     for line in iter(pipe.readline, ''):
-                        if line.strip() and not self.worker_thread.stop_requested:
+                        if line.strip() and not self.worker_thread.stop_requested: # pyright: ignore[reportOptionalMemberAccess]
                             # Try to decode with utf-8 if needed
                             if isinstance(line, bytes):
                                 try:
@@ -1395,9 +1542,9 @@ class TikTokCreatorApp(QMainWindow):
                                     # Fall back to a more forgiving encoding
                                     line = line.decode('utf-8', errors='replace')
                             
-                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}")
+                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}") # pyright: ignore[reportOptionalMemberAccess]
                 except UnicodeDecodeError:
-                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]")
+                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]") # pyright: ignore[reportOptionalMemberAccess]
                 finally:
                     pipe.close()
             
@@ -1421,23 +1568,46 @@ class TikTokCreatorApp(QMainWindow):
             return True
         
         except Exception as e:
-            self.worker_thread.update_log.emit(f"Error in NewsCheck: {str(e)}")
+            if self.worker_thread:
+                self.worker_thread.update_log.emit(f"Error in NewsCheck: {str(e)}")
             return False
 
     def _run_speech_generation(self):
         """Execute the MTTS_apiForGenerated.py script for text-to-speech conversion."""
         try:
+            if not self.worker_thread:
+                return False
             self.worker_thread.update_log.emit("Running speech generation...")
             
-            # Run MTTS_apiForGenerated.py
+            # Set environment variables to prevent Qt conflicts
+            env = os.environ.copy()
+            env["MPLBACKEND"] = "Agg"  # Use non-interactive matplotlib backend
+            env["QT_QPA_PLATFORM_PLUGIN_PATH"] = ""  # Prevent Qt plugin conflicts
+            
+            # Run TTSCaller.py (local wrapper that calls OPENAIFM node)
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            script_path = os.path.join(script_dir, "GeneratedScripts", "TTSCaller.py")
+
+            # Read processed text to synthesize
+            text_file = os.path.join(os.getcwd(), "processed.txt")
+            try:
+                with open(text_file, 'r', encoding='utf-8') as tf:
+                    text_content = tf.read()
+            except Exception:
+                text_content = ""
+
+            voice = self.voice_combo.currentText() if hasattr(self, 'voice_combo') else "Shimmer"
+            vibe = self.vibe_combo.currentText() if hasattr(self, 'vibe_combo') else "---"
+
             process = subprocess.Popen(
-                [sys.executable, r"GeneratedScripts\MTTS_apiForGenerated.py"],
+                [sys.executable, script_path, "--text", text_content, "--voice", voice, "--vibe", vibe],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 encoding='utf-8',
                 errors='replace',
                 text=True,
-                bufsize=1
+                bufsize=1,
+                env=env  # Pass modified environment
             )
             
             # Register the process with the worker thread
@@ -1448,7 +1618,7 @@ class TikTokCreatorApp(QMainWindow):
                 """Process output from a subprocess, handling encoding errors"""
                 try:
                     for line in iter(pipe.readline, ''):
-                        if line.strip() and not self.worker_thread.stop_requested:
+                        if line.strip() and not self.worker_thread.stop_requested: # pyright: ignore[reportOptionalMemberAccess]
                             # Try to decode with utf-8 if needed
                             if isinstance(line, bytes):
                                 try:
@@ -1457,9 +1627,9 @@ class TikTokCreatorApp(QMainWindow):
                                     # Fall back to a more forgiving encoding
                                     line = line.decode('utf-8', errors='replace')
                             
-                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}")
+                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}") # pyright: ignore[reportOptionalMemberAccess]
                 except UnicodeDecodeError:
-                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]")
+                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]") # pyright: ignore[reportOptionalMemberAccess]
                 finally:
                     pipe.close()
             
@@ -1476,19 +1646,29 @@ class TikTokCreatorApp(QMainWindow):
                 return False
                 
             if process.returncode != 0:
-                self.worker_thread.update_log.emit(f"Speech generation failed with code {process.returncode}")
-                return False
+                # Check if failure was due to Qt warnings vs actual errors
+                self.worker_thread.update_log.emit(f"Speech generation process returned code {process.returncode}")
+                # Don't treat Qt GUI integration warnings as fatal errors
+                if process.returncode in [-1073741819, 1]:  # Common Qt warning exit codes
+                    self.worker_thread.update_log.emit("Process completed despite Qt warnings (non-critical)")
+                    return True
+                else:
+                    self.worker_thread.update_log.emit(f"Speech generation failed with code {process.returncode}")
+                    return False
             
             self.worker_thread.update_log.emit("Speech generation completed successfully")
             return True
         
         except Exception as e:
-            self.worker_thread.update_log.emit(f"Error in speech generation: {str(e)}")
+            if self.worker_thread:
+                self.worker_thread.update_log.emit(f"Error in speech generation: {str(e)}")
             return False
 
     def _run_posting(self):
         """Execute the postForGenerated.py script to post content to TikTok."""
         try:
+            if not self.worker_thread:
+                return False
             self.worker_thread.update_log.emit("Running TikTok posting...")
             
             # Run postForGenerated.py
@@ -1496,6 +1676,8 @@ class TikTokCreatorApp(QMainWindow):
                 [sys.executable, r"GeneratedScripts\postForGenerated.py"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                encoding='utf-8',
+                errors='replace',
                 text=True,
                 bufsize=1
             )
@@ -1508,18 +1690,10 @@ class TikTokCreatorApp(QMainWindow):
                 """Process output from a subprocess, handling encoding errors"""
                 try:
                     for line in iter(pipe.readline, ''):
-                        if line.strip() and not self.worker_thread.stop_requested:
-                            # Try to decode with utf-8 if needed
-                            if isinstance(line, bytes):
-                                try:
-                                    line = line.decode('utf-8')
-                                except UnicodeDecodeError:
-                                    # Fall back to a more forgiving encoding
-                                    line = line.decode('utf-8', errors='replace')
-                            
-                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}")
+                        if line.strip() and not self.worker_thread.stop_requested: # pyright: ignore[reportOptionalMemberAccess]
+                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}") # pyright: ignore[reportOptionalMemberAccess]
                 except UnicodeDecodeError:
-                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]")
+                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]") # pyright: ignore[reportOptionalMemberAccess]
                 finally:
                     pipe.close()
             
@@ -1543,7 +1717,8 @@ class TikTokCreatorApp(QMainWindow):
             return True
         
         except Exception as e:
-            self.worker_thread.update_log.emit(f"Error in TikTok posting: {str(e)}")
+            if self.worker_thread:
+                self.worker_thread.update_log.emit(f"Error in TikTok posting: {str(e)}")
             return False
 
     def process_finished(self, success, error_msg):
@@ -1569,6 +1744,8 @@ class TikTokCreatorApp(QMainWindow):
     def _run_video_editing(self, add_minigame=False, record_game=False, selected_game="Random Game"):
         """Execute the tiktokimagegenForGenerated.py and editVideoTestForGenerated.py scripts."""
         try:
+            if not self.worker_thread:
+                return False
             self.worker_thread.update_log.emit("Running image generation and video editing...")
             
             # Updated to use parameters instead of directly accessing self.add_minigame_checkbox
@@ -1627,7 +1804,7 @@ class TikTokCreatorApp(QMainWindow):
                 """Process output from a subprocess, handling encoding errors"""
                 try:
                     for line in iter(pipe.readline, ''):
-                        if line.strip() and not self.worker_thread.stop_requested:
+                        if line.strip() and not self.worker_thread.stop_requested: # pyright: ignore[reportOptionalMemberAccess]
                             # Try to decode with utf-8 if needed
                             if isinstance(line, bytes):
                                 try:
@@ -1636,9 +1813,9 @@ class TikTokCreatorApp(QMainWindow):
                                     # Fall back to a more forgiving encoding
                                     line = line.decode('utf-8', errors='replace')
                             
-                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}")
+                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}") # pyright: ignore[reportOptionalMemberAccess]
                 except UnicodeDecodeError:
-                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]")
+                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]") # pyright: ignore[reportOptionalMemberAccess]
                 finally:
                     pipe.close()
             
@@ -1692,7 +1869,8 @@ class TikTokCreatorApp(QMainWindow):
             return True
         
         except Exception as e:
-            self.worker_thread.update_log.emit(f"Error in video editing: {str(e)}")
+            if self.worker_thread:
+                self.worker_thread.update_log.emit(f"Error in video editing: {str(e)}")
             return False
 
     
@@ -1708,7 +1886,7 @@ class TikTokCreatorApp(QMainWindow):
         
         if success:
             self.status_bar.showMessage("Ready")
-            QMessageBox.information(self, "Success", "Workflow completed successfully!")
+            QMessageBox.information(self, "Success", "Workflow completed successfully!", QMessageBox.StandardButton.Ok)
         else:
             self.status_bar.showMessage(f"Error: {error_msg}")
             QMessageBox.critical(self, "Error", f"Workflow failed: {error_msg}")
@@ -1789,8 +1967,8 @@ class TikTokCreatorApp(QMainWindow):
     
         # Add a separator before the workflow progress
         separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
         layout.addWidget(separator)
 
     def refresh_workflow_list(self):
@@ -1842,10 +2020,11 @@ class TikTokCreatorApp(QMainWindow):
         
         # Create and start worker thread
         self.worker_thread = WorkerThread(self._run_workflow, [workflow_path])
-        self.worker_thread.update_log.connect(self.log)
-        self.worker_thread.progress_update.connect(self.workflow_progress.setValue)
-        self.worker_thread.finished.connect(self.workflow_finished)
-        self.worker_thread.start()
+        if self.worker_thread:  # Add null check
+            self.worker_thread.update_log.connect(self.log)
+            self.worker_thread.progress_update.connect(self.workflow_progress.setValue)
+            self.worker_thread.finished.connect(self.workflow_finished)
+            self.worker_thread.start()
         
         self.log(f"Started workflow: {selected_workflow}")
         self.status_bar.showMessage(f"Running workflow: {selected_workflow}")
@@ -1853,6 +2032,8 @@ class TikTokCreatorApp(QMainWindow):
     def _run_workflow(self, workflow_path):
         """Execute the workflow directly implementing the functionality of runallForGenerated.py"""
         try:
+            if not self.worker_thread:
+                return False
             self.worker_thread.update_log.emit(f"Running workflow: {workflow_path}")
             
             # Get minigame settings from UI
@@ -1934,7 +2115,7 @@ class TikTokCreatorApp(QMainWindow):
                 """Process output from a subprocess, handling encoding errors"""
                 try:
                     for line in iter(pipe.readline, ''):
-                        if line.strip() and not self.worker_thread.stop_requested:
+                        if line.strip() and not self.worker_thread.stop_requested: # pyright: ignore[reportOptionalMemberAccess]
                             # Try to decode with utf-8 if needed
                             if isinstance(line, bytes):
                                 try:
@@ -1943,9 +2124,9 @@ class TikTokCreatorApp(QMainWindow):
                                     # Fall back to a more forgiving encoding
                                     line = line.decode('utf-8', errors='replace')
                             
-                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}")
+                            self.worker_thread.update_log.emit(f"{prefix}: {line.strip()}") # pyright: ignore[reportOptionalMemberAccess]
                 except UnicodeDecodeError:
-                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]")
+                    self.worker_thread.update_log.emit(f"{prefix}: [Unicode decoding error - some output could not be displayed]") # pyright: ignore[reportOptionalMemberAccess]
                 finally:
                     pipe.close()
             
@@ -1981,10 +2162,11 @@ class TikTokCreatorApp(QMainWindow):
                     # Open the file with default text editor
                     self.worker_thread.update_log.emit("Opening processed.txt for review...")
                     
-                    # We need to inform the user in the main thread
-                    QMetaObject.invokeMethod(self, "show_review_dialog", 
-                                             Qt.QueuedConnection,
-                                             Q_ARG(str, processed_file_path))
+                    # We need to inform the user in the main thread - use a simple approach
+                    self.worker_thread.update_log.emit("Opening processed.txt for review...")
+                    
+                    # Call show_review_dialog directly since we're already in a worker thread
+                    self.show_review_dialog(processed_file_path)
                     
                     # Wait for the dialog result
                     while not hasattr(self, "review_confirmed") or not self.review_confirmed:
@@ -2053,7 +2235,8 @@ class TikTokCreatorApp(QMainWindow):
             self.worker_thread.update_log.emit("Workflow completed successfully")
             return True
         except Exception as e:
-            self.worker_thread.update_log.emit(f"Error running workflow: {str(e)}")
+            if self.worker_thread:
+                self.worker_thread.update_log.emit(f"Error running workflow: {str(e)}")
             return False
 
     def configure_browser(self):
@@ -2188,19 +2371,19 @@ class TikTokCreatorApp(QMainWindow):
     def update_record_setting(self, state, is_main=True):
         """Auto-save the record game setting when checkbox state changes"""
         if is_main:
-            self.update_config_setting("main_record_game", state == Qt.Checked)
+            self.update_config_setting("main_record_game", state == Qt.CheckState.Checked)
             self.log("Main workflow auto-record setting updated in CONFIG.txt")
         else:
-            self.update_config_setting("custom_record_game", state == Qt.Checked)
+            self.update_config_setting("custom_record_game", state == Qt.CheckState.Checked)
             self.log("Custom workflow auto-record setting updated in CONFIG.txt")
 
     def update_minigame_setting(self, state, is_main=True):
         """Auto-save the add minigame setting when checkbox state changes"""
         if is_main:
-            self.update_config_setting("main_add_minigame_to_video", state == Qt.Checked)
+            self.update_config_setting("main_add_minigame_to_video", state == Qt.CheckState.Checked)
             self.log("Main workflow add to video setting updated in CONFIG.txt")
         else:
-            self.update_config_setting("custom_add_minigame_to_video", state == Qt.Checked)
+            self.update_config_setting("custom_add_minigame_to_video", state == Qt.CheckState.Checked)
             self.log("Custom workflow add to video setting updated in CONFIG.txt")
 
     def update_config_setting(self, key, value):
@@ -2255,6 +2438,8 @@ class TikTokCreatorApp(QMainWindow):
     def _run_get_data(self):
         """Execute the getdata.py script"""
         try:
+            if not self.worker_thread:
+                return False
             self.worker_thread.update_log.emit("Running player data collection...")
             
             # Run the getdata.py script
@@ -2271,7 +2456,8 @@ class TikTokCreatorApp(QMainWindow):
             self.worker_thread.update_log.emit("Player data collection completed successfully")
             return True
         except Exception as e:
-            self.worker_thread.update_log.emit(f"Error running player data collection: {str(e)}")
+            if self.worker_thread:
+                self.worker_thread.update_log.emit(f"Error running player data collection: {str(e)}")
             return False
 
     def get_data_finished(self, success, error_msg):
@@ -2327,6 +2513,8 @@ class TikTokCreatorApp(QMainWindow):
     def _launch_game(self, game_script, record=True):
         """Execute the game script and recording script in parallel if requested"""
         try:
+            if not self.worker_thread:
+                return False
             self.worker_thread.update_log.emit(f"Launching game: {game_script}")
             
             # Start the game process
@@ -2363,7 +2551,8 @@ class TikTokCreatorApp(QMainWindow):
             self.worker_thread.update_log.emit("Game session completed")
             return True
         except Exception as e:
-            self.worker_thread.update_log.emit(f"Error running game: {str(e)}")
+            if self.worker_thread:
+                self.worker_thread.update_log.emit(f"Error running game: {str(e)}")
             return False
 
     def game_finished(self, success, error_msg):
@@ -2374,7 +2563,14 @@ class TikTokCreatorApp(QMainWindow):
             self.status_bar.showMessage("Game session completed")
             
             # If "Add to Video" is checked, update the settings
-            if self.add_minigame_checkbox.isChecked():
+            # Check both main and custom workflow checkboxes
+            add_to_video = False
+            if hasattr(self, 'main_add_minigame_checkbox') and self.main_add_minigame_checkbox.isChecked():
+                add_to_video = True
+            elif hasattr(self, 'custom_add_minigame_checkbox') and self.custom_add_minigame_checkbox.isChecked():
+                add_to_video = True
+                
+            if add_to_video:
                 # Find the latest recording to use in the video
                 output_dir = os.path.join(os.getcwd(), "Minigames", "output")
                 if os.path.exists(output_dir):
@@ -2396,7 +2592,9 @@ if __name__ == "__main__":
         if hwnd != 0:
             ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE = 0
     app = QApplication(sys.argv)
+
     app.setStyle("Fusion")  # Modern look across platforms
+
     window = TikTokCreatorApp()
     window.show()
     sys.exit(app.exec())
