@@ -18,6 +18,31 @@ sys.path.append(os.path.dirname(__file__))
 from path_utils import find_project_root
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
+
+
+def get_icon_path() -> str:
+    """Return the best candidate path for the application icon (ico)."""
+    # Candidate locations (ordered):
+    # 1) Resources/ico.ico next to this UI.py
+    # 2) parent/Resources/ico.ico
+    # 3) project root / TikTokGenerator / Resources / ico.ico
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        candidates = [
+            os.path.join(script_dir, "Resources", "ico.ico"),
+            os.path.join(os.path.dirname(script_dir), "Resources", "ico.ico"),
+        ]
+        proj_root = find_project_root()
+        if proj_root:
+            candidates.append(os.path.join(proj_root, "TikTokGenerator", "Resources", "ico.ico"))
+            candidates.append(os.path.join(proj_root, "Resources", "ico.ico"))
+
+        for p in candidates:
+            if p and os.path.exists(p):
+                return p
+    except Exception:
+        pass
+    return ""
 # Create a custom log handler that redirects to the UI
 class UILogHandler(logging.Handler):
     def __init__(self, ui_callback):
@@ -101,8 +126,8 @@ class TikTokCreatorApp(QMainWindow):
         try:
             project_root = find_project_root()
             if project_root:
-                icon_path = os.path.join(project_root, "Resources", "ico.ico")
-                if os.path.exists(icon_path):
+                icon_path = get_icon_path()
+                if icon_path:
                     self.setWindowIcon(QIcon(icon_path))
         except:
             pass
@@ -2623,9 +2648,22 @@ if __name__ == "__main__":
             ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE = 0
     app = QApplication(sys.argv)
 
+    # Set the application icon early so Windows will use it for the taskbar
+    try:
+        ico = get_icon_path()
+        if ico:
+            app.setWindowIcon(QIcon(ico))
+    except Exception:
+        pass
+
     app.setStyle("Fusion")  # Modern look across platforms
 
     window = TikTokCreatorApp()
+    try:
+        if ico and os.path.exists(ico):
+            window.setWindowIcon(QIcon(ico))
+    except Exception:
+        pass
+
     window.show()
     sys.exit(app.exec())
-
