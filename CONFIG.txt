@@ -1,13 +1,13 @@
 # TikTok Creator Configuration File
 # Last saved: 2025-08-27 23:56:45
 
-output_directory=D:\TikTokCreator\TikTokCreator\Output
+output_directory=
 tiktok_account=
 voice=Ballad
 vibe=Dramatic
 zoom_factor=2.0
 last_query=
-last_workflow=generated_script.py
+last_workflow=
 main_add_minigame_to_video=True
 main_record_game=True
 main_selected_game=Random Game
@@ -15,3 +15,4 @@ custom_add_minigame_to_video=True
 custom_record_game=True
 custom_selected_game=Random Game
 review_prompt=True
+
