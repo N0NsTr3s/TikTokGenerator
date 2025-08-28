@@ -1,4 +1,3 @@
-# filepath: D:\ComfyUI_windows_portable\TikTokCreator\GeneratedScripts\generated_script.py
 # Generated script from SeleniumRecorder
 import time
 import json
@@ -106,7 +105,8 @@ def run_scraper():
     options.add_argument("--start-maximized")
     
     # Use your default Chrome profile
-    user_data_dir = 'C:\\Users\\Edi\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 1'
+    localappdata = os.getenv("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+    user_data_dir = os.path.join(localappdata, "Google", "Chrome", "User Data", "Profile 1")
     options.add_argument(f"--user-data-dir={user_data_dir}")
     
     # Initialize the Chrome driver
@@ -228,7 +228,7 @@ def parse_with_AI():
     time.sleep(10)
     client = OpenAI(base_url='http://localhost:1234/v1', api_key="Nothing here")
     subprocess.run("lms server start")
-    subprocess.run("lms load cognitivecomputations/Dolphin3.0-Llama3.1-8B-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
+    subprocess.run("lms load roleplaiapp/Dolphin3.0-Llama3.1-8B-Q3_K_S-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
 
     def estimate_tokens(text):
         # Estimate tokens by counting words
@@ -287,6 +287,7 @@ def parse_with_AI():
             results.append(result)
         
         # Combine results
+        
         final_result = " ".join(results)
         print(final_result)
     else:
@@ -298,7 +299,7 @@ def parse_with_AI():
     subprocess.run("lms server stop")
 
     with open("processed.txt", "w", encoding="utf-8") as f:
-        f.write(final_result)
+        f.write(final_result or "")
     print(f"Results written to processed.txt")
 
 
