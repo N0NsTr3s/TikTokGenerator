@@ -14,6 +14,7 @@ from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 from PySide6.QtGui import QIcon, QDesktopServices, QDoubleValidator
 import random
 import logging
+sys.path.append(os.path.dirname(__file__))
 from path_utils import find_project_root
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -2627,3 +2628,4 @@ if __name__ == "__main__":
     window = TikTokCreatorApp()
     window.show()
     sys.exit(app.exec())
+
