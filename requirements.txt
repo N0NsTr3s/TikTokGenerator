@@ -146,5 +146,7 @@ websockets==15.0.1
 wsproto==1.2.0
 yarl
 zope.event==5.1.1
+pyinstaller
 zope.interface==7.2
+
 
