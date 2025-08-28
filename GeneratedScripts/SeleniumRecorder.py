@@ -192,7 +192,7 @@ def parse_with_AI():
     time.sleep(10)
     client = OpenAI(base_url='http://localhost:1234/v1', api_key="Nothing here")
     subprocess.run("lms server start")
-    subprocess.run("lms load cognitivecomputations/Dolphin3.0-Llama3.1-8B-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
+    subprocess.run("lms load roleplaiapp/Dolphin3.0-Llama3.1-8B-Q3_K_S-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
 
 
     def estimate_tokens(text):
@@ -1258,4 +1258,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
