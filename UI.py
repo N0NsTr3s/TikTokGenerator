@@ -16,7 +16,7 @@ import random
 import logging
 sys.path.append(os.path.dirname(__file__))
 from path_utils import find_project_root
-from helper import run_subprocess
+from helper import run_subprocess, check_cuda_installation, check_lms_installation, check_lms_model, check_cuda_installation, check_lms_installation, check_lms_model, install_cuda, install_lms, install_lms_model
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
@@ -107,6 +107,39 @@ class WorkerThread(QThread):
         # Clear the process list
         self.processes.clear()
 
+class RequirementsInstallWorker(QThread):
+    progress_update = Signal(str)
+    finished = Signal(bool, str)
+    
+    def __init__(self, requirements_to_install):
+        super().__init__()
+        self.requirements_to_install = requirements_to_install
+    
+    def run(self):
+        try:
+            for requirement in self.requirements_to_install:
+                if requirement == "CUDA":
+                    self.progress_update.emit("Installing CUDA...")
+                    success = install_cuda()
+                elif requirement == "LM Studio":
+                    self.progress_update.emit("Installing LM Studio...")
+                    success = install_lms()
+                elif requirement == "Dolphin Model":
+                    self.progress_update.emit("Installing Dolphin Model...")
+                    success = install_lms_model()
+                else:
+                    continue
+                
+                if not success:
+                    self.finished.emit(False, f"Failed to install {requirement}")
+                    return
+                    
+                self.progress_update.emit(f"{requirement} installed successfully")
+            
+            self.finished.emit(True, "All selected requirements installed successfully")
+        except Exception as e:
+            self.finished.emit(False, f"Installation error: {str(e)}")
+
 class TikTokCreatorApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -161,6 +194,9 @@ class TikTokCreatorApp(QMainWindow):
         self.setup_workflow_tab()
         self.setup_custom_workflows_tab()
         self.setup_settings_tab()
+        
+        # Check system requirements on startup
+        QTimer.singleShot(1000, self.check_system_requirements_popup)
         
         # Initialize variables
         self.process_running = False
@@ -1196,6 +1232,261 @@ class TikTokCreatorApp(QMainWindow):
         button_layout.addWidget(clear_btn)
         button_layout.addWidget(save_btn)
         layout.addLayout(button_layout)
+
+    def check_system_requirements_popup(self):
+        """Check system requirements and show a popup if any are missing."""
+        missing_requirements = []
+        
+        # Check CUDA
+        try:
+            if not check_cuda_installation():
+                missing_requirements.append("NVIDIA CUDA (for GPU acceleration)")
+        except Exception:
+            missing_requirements.append("NVIDIA CUDA (for GPU acceleration)")
+        
+        # Check LM Studio
+        try:
+            if not check_lms_installation():
+                missing_requirements.append("LM Studio (for AI text processing)")
+        except Exception:
+            missing_requirements.append("LM Studio (for AI text processing)")
+        
+        # Check Dolphin Model (only if LM Studio is available)
+        try:
+            if check_lms_installation() and not check_lms_model():
+                missing_requirements.append("Dolphin AI Model (for text generation)")
+        except Exception:
+            pass  # Skip model check if LM Studio isn't available
+        
+        # Show popup if requirements are missing
+        if missing_requirements:
+            message = "The following system requirements are missing:\n\n"
+            for req in missing_requirements:
+                message += f"• {req}\n"
+            message += "\nSome features may not work properly without these components."
+            
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("System Requirements")
+            msg_box.setText(message)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
+            msg_box.exec()
+        else:
+            self.log("✅ All system requirements are met")
+        
+        # Requirements frame
+        requirements_frame = QFrame()
+        requirements_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        requirements_layout = QVBoxLayout(requirements_frame)
+        
+        # CUDA requirement
+        self.cuda_group = QGroupBox("NVIDIA CUDA (for GPU acceleration)")
+        cuda_layout = QVBoxLayout(self.cuda_group)
+        
+        self.cuda_status_label = QLabel("Checking...")
+        self.cuda_checkbox = QCheckBox("Install CUDA 12.9.0")
+        self.cuda_checkbox.setEnabled(False)
+        
+        cuda_layout.addWidget(self.cuda_status_label)
+        cuda_layout.addWidget(self.cuda_checkbox)
+        requirements_layout.addWidget(self.cuda_group)
+        
+        # LM Studio requirement
+        self.lms_group = QGroupBox("LM Studio (for AI text processing)")
+        lms_layout = QVBoxLayout(self.lms_group)
+        
+        self.lms_status_label = QLabel("Checking...")
+        self.lms_checkbox = QCheckBox("Install LM Studio")
+        self.lms_checkbox.setEnabled(False)
+        
+        lms_layout.addWidget(self.lms_status_label)
+        lms_layout.addWidget(self.lms_checkbox)
+        requirements_layout.addWidget(self.lms_group)
+        
+        # LM Studio Model requirement
+        self.model_group = QGroupBox("Dolphin AI Model (for text processing)")
+        model_layout = QVBoxLayout(self.model_group)
+        
+        self.model_status_label = QLabel("Checking...")
+        self.model_checkbox = QCheckBox("Download Dolphin3.0-Llama3.1-8B-Q3_K_S model")
+        self.model_checkbox.setEnabled(False)
+        
+        model_layout.addWidget(self.model_status_label)
+        model_layout.addWidget(self.model_checkbox)
+        requirements_layout.addWidget(self.model_group)
+        
+        requirements_layout.addWidget(requirements_frame)
+        
+        # Action buttons
+        button_layout = QHBoxLayout()
+        
+        self.refresh_btn = QPushButton("Refresh Status")
+        self.refresh_btn.clicked.connect(self.check_requirements)
+        
+        self.install_btn = QPushButton("Install Selected")
+        self.install_btn.clicked.connect(self.install_selected_requirements)
+        self.install_btn.setEnabled(False)
+        
+        button_layout.addWidget(self.refresh_btn)
+        button_layout.addWidget(self.install_btn)
+        requirements_layout.addLayout(button_layout)
+        
+        # Progress bar
+        self.requirements_progress = QProgressBar()
+        self.requirements_progress.setVisible(False)
+        requirements_layout.addWidget(self.requirements_progress)
+        
+        # Status label
+        self.requirements_status = QLabel("")
+        requirements_layout.addWidget(self.requirements_status)
+        
+        requirements_layout.addStretch()
+        
+        # Start initial requirements check
+        QTimer.singleShot(1000, self.check_requirements)  # Check after 1 second
+    
+    def check_requirements(self):
+        """Check all system requirements and update UI."""
+        from helper import check_cuda_installation, check_lms_installation, check_lms_model
+        
+        self.requirements_status.setText("Checking system requirements...")
+        self.refresh_btn.setEnabled(False)
+        
+        # Check CUDA
+        try:
+            cuda_installed = check_cuda_installation()
+            if cuda_installed:
+                self.cuda_status_label.setText("✅ CUDA is installed and available")
+                self.cuda_status_label.setStyleSheet("color: green;")
+                self.cuda_checkbox.setVisible(False)
+            else:
+                self.cuda_status_label.setText("❌ CUDA is not installed")
+                self.cuda_status_label.setStyleSheet("color: red;")
+                self.cuda_checkbox.setVisible(True)
+                self.cuda_checkbox.setEnabled(True)
+        except Exception as e:
+            self.cuda_status_label.setText(f"❌ Error checking CUDA: {e}")
+            self.cuda_status_label.setStyleSheet("color: red;")
+            self.cuda_checkbox.setVisible(True)
+            self.cuda_checkbox.setEnabled(True)
+        
+        # Check LM Studio
+        try:
+            lms_installed = check_lms_installation()
+            if lms_installed:
+                self.lms_status_label.setText("✅ LM Studio CLI is installed and available")
+                self.lms_status_label.setStyleSheet("color: green;")
+                self.lms_checkbox.setVisible(False)
+            else:
+                self.lms_status_label.setText("❌ LM Studio CLI is not installed")
+                self.lms_status_label.setStyleSheet("color: red;")
+                self.lms_checkbox.setVisible(True)
+                self.lms_checkbox.setEnabled(True)
+        except Exception as e:
+            self.lms_status_label.setText(f"❌ Error checking LM Studio: {e}")
+            self.lms_status_label.setStyleSheet("color: red;")
+            self.lms_checkbox.setVisible(True)
+            self.lms_checkbox.setEnabled(True)
+        
+        # Check Model (only if LM Studio is installed)
+        try:
+            if hasattr(self, 'lms_status_label') and "✅" in self.lms_status_label.text():
+                model_available = check_lms_model()
+                if model_available:
+                    self.model_status_label.setText("✅ Dolphin model is available")
+                    self.model_status_label.setStyleSheet("color: green;")
+                    self.model_checkbox.setVisible(False)
+                else:
+                    self.model_status_label.setText("❌ Dolphin model is not available")
+                    self.model_status_label.setStyleSheet("color: red;")
+                    self.model_checkbox.setVisible(True)
+                    self.model_checkbox.setEnabled(True)
+            else:
+                self.model_status_label.setText("⏸️ LM Studio must be installed first")
+                self.model_status_label.setStyleSheet("color: orange;")
+                self.model_checkbox.setVisible(False)
+        except Exception as e:
+            self.model_status_label.setText(f"❌ Error checking model: {e}")
+            self.model_status_label.setStyleSheet("color: red;")
+            self.model_checkbox.setVisible(True)
+            self.model_checkbox.setEnabled(True)
+        
+        # Update install button state
+        any_missing = (
+            self.cuda_checkbox.isVisible() or 
+            self.lms_checkbox.isVisible() or 
+            self.model_checkbox.isVisible()
+        )
+        self.install_btn.setEnabled(any_missing)
+        
+        self.requirements_status.setText("Requirements check completed")
+        self.refresh_btn.setEnabled(True)
+    
+    def install_selected_requirements(self):
+        """Install the selected requirements."""
+        from helper import install_cuda, install_lms, install_lms_model
+        
+        selected_items = []
+        
+        if self.cuda_checkbox.isVisible() and self.cuda_checkbox.isChecked():
+            selected_items.append("CUDA")
+        if self.lms_checkbox.isVisible() and self.lms_checkbox.isChecked():
+            selected_items.append("LM Studio")
+        if self.model_checkbox.isVisible() and self.model_checkbox.isChecked():
+            selected_items.append("Dolphin Model")
+        
+        if not selected_items:
+            QMessageBox.warning(self, "Warning", "Please select at least one item to install.")
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "Confirm Installation", 
+            f"Are you sure you want to install the following items?\n\n{', '.join(selected_items)}\n\nThis may take a long time and require administrator privileges.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Collect requirements to install
+        requirements_to_install = []
+        if self.cuda_checkbox.isVisible() and self.cuda_checkbox.isChecked():
+            requirements_to_install.append("CUDA")
+        if self.lms_checkbox.isVisible() and self.lms_checkbox.isChecked():
+            requirements_to_install.append("LM Studio")
+        if self.model_checkbox.isVisible() and self.model_checkbox.isChecked():
+            requirements_to_install.append("Dolphin Model")
+        
+        # Start installation in a separate thread
+        self.requirements_worker = RequirementsInstallWorker(requirements_to_install)
+        
+        self.requirements_worker.progress_update.connect(self.update_requirements_status)
+        self.requirements_worker.finished.connect(self.requirements_installation_finished)
+        
+        self.requirements_progress.setVisible(True)
+        self.install_btn.setEnabled(False)
+        self.refresh_btn.setEnabled(False)
+        
+        self.requirements_worker.start()
+    
+    def update_requirements_status(self, message):
+        """Update the requirements installation status."""
+        self.requirements_status.setText(message)
+        logging.info(f"Requirements: {message}")
+    
+    def requirements_installation_finished(self, success, message):
+        """Handle completion of requirements installation."""
+        self.requirements_progress.setVisible(False)
+        self.install_btn.setEnabled(True)
+        self.refresh_btn.setEnabled(True)
+        
+        if success:
+            QMessageBox.information(self, "Installation Complete", message)
+            # Refresh requirements status
+            QTimer.singleShot(2000, self.check_requirements)
+        else:
+            QMessageBox.critical(self, "Installation Failed", message)
     
     def log(self, message):
         """Add a message to the log text area with error handling"""
