@@ -180,8 +180,238 @@ class RequirementsInstallWorker(QThread):
         except Exception as e:
             self.finished.emit(False, f"Installation error: {str(e)}")
 
+class ModelDownloadProgressDialog(QWidget):
+    """Progress dialog for model download with real-time updates"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Downloading AI Model")
+        self.setFixedSize(500, 200)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
+        
+        # Center the dialog on screen
+        self.move_to_center()
+        
+        layout = QVBoxLayout(self)
+        
+        # Title
+        title_label = QLabel("Downloading Dolphin 3.0 AI Model")
+        title_label.setStyleSheet("font-size: 14pt; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title_label)
+        
+        # Status label
+        self.status_label = QLabel("Preparing download...")
+        layout.addWidget(self.status_label)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        layout.addWidget(self.progress_bar)
+        
+        # Progress details
+        self.details_label = QLabel("0 MB / 0 MB")
+        layout.addWidget(self.details_label)
+        
+        # Speed and ETA
+        self.speed_label = QLabel("")
+        layout.addWidget(self.speed_label)
+        
+        # Cancel button
+        self.cancel_button = QPushButton("Cancel Download")
+        self.cancel_button.clicked.connect(self.cancel_download)
+        layout.addWidget(self.cancel_button)
+        
+        self.cancelled = False
+        
+    def move_to_center(self):
+        """Center the dialog on the screen"""
+        try:
+            screen = QApplication.primaryScreen().geometry()
+            x = (screen.width() - self.width()) // 2
+            y = (screen.height() - self.height()) // 2
+            self.move(x, y)
+        except:
+            pass
+    
+    def update_progress(self, percentage, downloaded_mb, total_mb, speed_mb=None, eta=None):
+        """Update the progress dialog with download information"""
+        self.progress_bar.setValue(int(percentage))
+        self.details_label.setText(f"{downloaded_mb:.1f} MB / {total_mb:.1f} MB ({percentage:.1f}%)")
+        
+        if speed_mb and eta:
+            self.speed_label.setText(f"Speed: {speed_mb:.1f} MB/s | ETA: {eta}")
+        elif speed_mb:
+            self.speed_label.setText(f"Speed: {speed_mb:.1f} MB/s")
+    
+    def update_status(self, status):
+        """Update the status message"""
+        self.status_label.setText(status)
+    
+    def cancel_download(self):
+        """Handle cancel button click"""
+        self.cancelled = True
+        self.status_label.setText("Cancelling download...")
+        self.cancel_button.setEnabled(False)
+    
+    def closeEvent(self, event):
+        """Handle window close event"""
+        self.cancelled = True
+        event.accept()
+
+class ModelDownloadWorker(QThread):
+    """Worker thread for downloading models with progress updates"""
+    progress_updated = Signal(float, float, float, float, str)  # percentage, downloaded_mb, total_mb, speed_mb, eta
+    status_updated = Signal(str)  # status message
+    download_completed = Signal(bool, str)  # success, message
+    
+    def __init__(self):
+        super().__init__()
+        self.cancelled = False
+        
+    def cancel_download(self):
+        """Cancel the download"""
+        self.cancelled = True
+        
+    def run(self):
+        """Run the model download in a separate thread"""
+        try:
+            self.status_updated.emit("Starting Dolphin model download via LM Studio CLI...")
+            
+            # First check if lms command is available
+            import shutil
+            lms_path = shutil.which("lms")
+            if not lms_path:
+                self.download_completed.emit(False, "LM Studio CLI (lms) not found in PATH. Please install LM Studio first.")
+                return
+            
+            # Use just the model name without the repository prefix
+            cmd = [lms_path, "get", "Dolphin3.0-Llama3.1-8B-Q3_K_S-GGUF", "-y"]
+            
+            self.status_updated.emit("Starting download...")
+            
+            # Use subprocess.Popen for real-time output monitoring with window suppression
+            import subprocess
+            import re
+            import time
+            import os
+            
+            # Set up window suppression for Windows
+            startupinfo = None
+            creationflags = 0
+            if os.name == 'nt' and hasattr(subprocess, 'STARTUPINFO'):
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                creationflags = subprocess.CREATE_NO_WINDOW
+            
+            proc = subprocess.Popen(
+                cmd, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.PIPE,
+                text=True, 
+                bufsize=1,
+                universal_newlines=True,
+                encoding='utf-8',
+                errors='replace',  # Replace invalid characters instead of failing
+                startupinfo=startupinfo,
+                creationflags=creationflags
+            )
+            
+            output_lines = []
+            while proc.poll() is None:
+                # Check if user cancelled
+                if self.cancelled:
+                    try:
+                        proc.terminate()
+                    except:
+                        pass
+                    self.download_completed.emit(False, "Download cancelled by user")
+                    return
+                
+                # Read output line by line with error handling
+                try:
+                    if proc.stdout:
+                        line = proc.stdout.readline()
+                        if line:
+                            # Clean the line of ANSI escape sequences and special characters
+                            clean_line = re.sub(r'\x1b\[[0-9;]*[mGKH]', '', line)  # Remove ANSI codes
+                            clean_line = re.sub(r'[^\x20-\x7E\s]', '', clean_line)  # Keep only printable ASCII
+                            output_lines.append(clean_line.strip())
+                            
+                            # Parse progress information from cleaned LM Studio output
+                            # Looking for patterns like: "2.05% | 74.98 MB / 3.66 GB | 26.90 MB/s | ETA 02:13"
+                            if '|' in clean_line and '%' in clean_line:
+                                try:
+                                    # Extract percentage
+                                    percent_match = re.search(r'(\d+\.?\d*)%', clean_line)
+                                    if percent_match:
+                                        percentage = float(percent_match.group(1))
+                                        
+                                        # Extract downloaded/total sizes
+                                        size_match = re.search(r'(\d+\.?\d*)\s*(MB|GB)\s*/\s*(\d+\.?\d*)\s*(MB|GB)', clean_line)
+                                        if size_match:
+                                            downloaded_val = float(size_match.group(1))
+                                            downloaded_unit = size_match.group(2)
+                                            total_val = float(size_match.group(3))
+                                            total_unit = size_match.group(4)
+                                            
+                                            # Convert to MB
+                                            downloaded_mb = downloaded_val * (1024 if downloaded_unit == 'GB' else 1)
+                                            total_mb = total_val * (1024 if total_unit == 'GB' else 1)
+                                            
+                                            # Extract speed
+                                            speed_match = re.search(r'(\d+\.?\d*)\s*MB/s', clean_line)
+                                            speed_mb = float(speed_match.group(1)) if speed_match else 0.0
+                                            
+                                            # Extract ETA
+                                            eta_match = re.search(r'ETA\s*(\d+:\d+)', clean_line)
+                                            eta = eta_match.group(1) if eta_match else ""
+                                            
+                                            # Emit progress update
+                                            self.progress_updated.emit(percentage, downloaded_mb, total_mb, speed_mb, eta)
+                                            self.status_updated.emit(f"Downloading... {percentage:.1f}%")
+                                            
+                                except (ValueError, AttributeError):
+                                    pass  # Continue if parsing fails
+                                    
+                            elif "Downloading" in clean_line:
+                                self.status_updated.emit("Download started...")
+                            elif "Multiple models found" in clean_line:
+                                self.status_updated.emit("Selecting model...")
+                            elif "Continue to download in the background" in clean_line:
+                                # Send 'Y' to continue in background
+                                if proc.stdin:
+                                    try:
+                                        proc.stdin.write("Y\n")
+                                        proc.stdin.flush()
+                                        self.status_updated.emit("Download continuing in background...")
+                                    except:
+                                        pass
+                except (UnicodeDecodeError, UnicodeError):
+                    # Skip lines that can't be decoded
+                    continue
+                
+                # Small sleep to prevent excessive CPU usage
+                time.sleep(0.1)
+            
+            # Get final return code
+            returncode = proc.returncode
+            
+            if returncode == 0:
+                self.download_completed.emit(True, "Model download completed successfully")
+            else:
+                full_output = '\n'.join(output_lines)
+                error_msg = f"Model download failed (exit code {returncode}): {full_output[-200:] if full_output else 'No error details'}"
+                self.download_completed.emit(False, error_msg)
+
+        except Exception as e:
+            self.download_completed.emit(False, f"Error during model installation: {str(e)}")
+
 class RequirementsCheckerWorker(QThread):
     requirements_checked = Signal(list)  # Emits list of missing requirements
+    model_installing = Signal(str)  # Emits status message during model installation
+    model_installation_needed = Signal()  # Emits when model installation should start
     
     def __init__(self):
         super().__init__()
@@ -201,12 +431,18 @@ class RequirementsCheckerWorker(QThread):
             if not self.check_lms_with_timeout():
                 missing_requirements.append("LM Studio (for AI text processing)")
             else:
-                # Only check model if LM Studio is available
+                # Check model availability if LM Studio is available
                 try:
                     if not self.check_lms_model_with_timeout():
-                        missing_requirements.append("Dolphin AI Model (for text generation)")
-                except Exception:
-                    pass  # Skip model check if there's an error
+                        self.model_installing.emit("Dolphin AI Model not found, starting automatic installation...")
+                        # Emit signal to start model installation in main thread
+                        self.model_installation_needed.emit()
+                        # Continue to emit requirements_checked but don't add model to missing list
+                    else:
+                        self.model_installing.emit("Dolphin AI Model is already available")
+                except Exception as e:
+                    missing_requirements.append("Dolphin AI Model (for text generation)")
+                    self.model_installing.emit(f"Error checking model: {str(e)}")
         except Exception:
             missing_requirements.append("LM Studio (for AI text processing)")
         
@@ -255,6 +491,9 @@ class TikTokCreatorApp(QMainWindow):
         
         # Initialize review flag
         self.review_confirmed = False
+        
+        # Initialize model installation flag
+        self.model_installation_in_progress = False
         
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
@@ -1344,7 +1583,65 @@ class TikTokCreatorApp(QMainWindow):
         """Start the requirements check in a separate thread."""
         self.requirements_checker = RequirementsCheckerWorker()
         self.requirements_checker.requirements_checked.connect(self.show_requirements_popup)
+        self.requirements_checker.model_installing.connect(self.log_model_installation)
+        self.requirements_checker.model_installation_needed.connect(self.start_model_installation)
         self.requirements_checker.start()
+    
+    def start_model_installation(self):
+        """Start the model installation in a separate thread with progress dialog."""
+        # Prevent multiple simultaneous installations
+        if self.model_installation_in_progress:
+            self.log_model_installation("Model installation already in progress, skipping...")
+            return
+            
+        self.model_installation_in_progress = True
+        self.log_model_installation("Starting model installation...")
+        
+        # Create and show progress dialog
+        self.progress_dialog = ModelDownloadProgressDialog()
+        self.progress_dialog.show()
+        
+        # Create and start download worker
+        self.model_download_worker = ModelDownloadWorker()
+        
+        # Connect signals
+        self.model_download_worker.progress_updated.connect(self.progress_dialog.update_progress)
+        self.model_download_worker.status_updated.connect(self.progress_dialog.update_status)
+        self.model_download_worker.download_completed.connect(self.on_model_download_completed)
+        
+        # Connect cancel button to worker
+        self.progress_dialog.cancel_button.clicked.connect(self.model_download_worker.cancel_download)
+        
+        # Start the download
+        self.model_download_worker.start()
+    
+    def on_model_download_completed(self, success, message):
+        """Handle model download completion."""
+        # Reset the installation flag
+        self.model_installation_in_progress = False
+        
+        # Close progress dialog
+        if hasattr(self, 'progress_dialog'):
+            self.progress_dialog.close()
+            
+        # Log the result
+        self.log_model_installation(message)
+        
+        if success:
+            # Just log success, don't restart requirements check to avoid loop
+            self.log_model_installation("Model installation completed successfully! Restart the application to use the new model.")
+        else:
+            # Show error message
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Model Installation Failed")
+            msg_box.setText(f"Failed to install the Dolphin AI model:\n\n{message}")
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            msg_box.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
+            msg_box.exec()
+    
+    def log_model_installation(self, message):
+        """Log model installation status messages."""
+        self.log(f"🤖 Model Installation: {message}")
     
     def show_requirements_popup(self, missing_requirements):
         """Show popup with missing requirements or log success message."""
