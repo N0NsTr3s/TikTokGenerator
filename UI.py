@@ -4,19 +4,59 @@ import threading
 import subprocess
 import time
 from typing import Optional
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton, QLabel, 
-                              QLineEdit, QProgressBar, QTabWidget, QVBoxLayout, QHBoxLayout, 
-                              QFormLayout, QTextEdit, QComboBox, QFileDialog, QMessageBox, 
-                              QSlider, QGroupBox, QFrame, QSplitter, QCheckBox, QScrollArea,QListWidget,QInputDialog,
-                              QAbstractItemView)
-from PySide6.QtCore import Qt, QThread, Signal, QUrl, QTimer, QMetaObject, Q_ARG, Slot, QAbstractListModel
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
-from PySide6.QtGui import QIcon, QDesktopServices, QDoubleValidator
 import random
 import logging
+
+# Handle missing dependencies gracefully
+missing_dependencies = []
+PYSIDE6_AVAILABLE = False
+HELPER_AVAILABLE = False
+PATH_UTILS_AVAILABLE = False
+
+try:
+    from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton, QLabel, 
+                                  QLineEdit, QProgressBar, QTabWidget, QVBoxLayout, QHBoxLayout, 
+                                  QFormLayout, QTextEdit, QComboBox, QFileDialog, QMessageBox, 
+                                  QSlider, QGroupBox, QFrame, QSplitter, QCheckBox, QScrollArea,QListWidget,QInputDialog,
+                                  QAbstractItemView)
+    from PySide6.QtCore import Qt, QThread, Signal, QUrl, QTimer, QMetaObject, Q_ARG, Slot, QAbstractListModel
+    from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
+    from PySide6.QtGui import QIcon, QDesktopServices, QDoubleValidator
+    PYSIDE6_AVAILABLE = True
+except ImportError as e:
+    missing_dependencies.append(f"PySide6: {str(e)}")
+
 sys.path.append(os.path.dirname(__file__))
-from path_utils import find_project_root
-from helper import run_subprocess, check_cuda_installation, check_lms_installation, check_lms_model, check_cuda_installation, check_lms_installation, check_lms_model, install_cuda, install_lms, install_lms_model
+
+try:
+    from path_utils import find_project_root # pyright: ignore[reportAssignmentType]
+    PATH_UTILS_AVAILABLE = True
+except ImportError as e:
+    missing_dependencies.append(f"path_utils: {str(e)}")
+    # Provide a fallback function
+    def find_project_root():
+        return os.path.dirname(os.path.abspath(__file__))
+
+try:
+    from helper import run_subprocess, check_cuda_installation, check_lms_installation, check_lms_model, install_cuda, install_lms, install_lms_model # pyright: ignore[reportAssignmentType]
+    HELPER_AVAILABLE = True
+except ImportError as e:
+    missing_dependencies.append(f"helper: {str(e)}")
+    # Provide fallback functions
+    def run_subprocess(*args, **kwargs):
+        return None
+    def check_cuda_installation():
+        return False
+    def check_lms_installation():
+        return False
+    def check_lms_model():
+        return False
+    def install_cuda():
+        return False
+    def install_lms():
+        return False
+    def install_lms_model():
+        return False
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
@@ -140,6 +180,73 @@ class RequirementsInstallWorker(QThread):
         except Exception as e:
             self.finished.emit(False, f"Installation error: {str(e)}")
 
+class RequirementsCheckerWorker(QThread):
+    requirements_checked = Signal(list)  # Emits list of missing requirements
+    
+    def __init__(self):
+        super().__init__()
+    
+    def run(self):
+        missing_requirements = []
+        
+        # Check CUDA with timeout
+        try:
+            if not self.check_cuda_with_timeout():
+                missing_requirements.append("NVIDIA CUDA (for GPU acceleration)")
+        except Exception:
+            missing_requirements.append("NVIDIA CUDA (for GPU acceleration)")
+        
+        # Check LM Studio with timeout
+        try:
+            if not self.check_lms_with_timeout():
+                missing_requirements.append("LM Studio (for AI text processing)")
+            else:
+                # Only check model if LM Studio is available
+                try:
+                    if not self.check_lms_model_with_timeout():
+                        missing_requirements.append("Dolphin AI Model (for text generation)")
+                except Exception:
+                    pass  # Skip model check if there's an error
+        except Exception:
+            missing_requirements.append("LM Studio (for AI text processing)")
+        
+        self.requirements_checked.emit(missing_requirements)
+    
+    def check_cuda_with_timeout(self):
+        """Check CUDA installation with 5-second timeout."""
+        try:
+            result = run_subprocess(["nvcc", "--version"], timeout=5)
+            return result and result.returncode == 0
+        except Exception:
+            return False
+    
+    def check_lms_with_timeout(self):
+        """Check LM Studio installation with 10-second timeout."""
+        try:
+            # First try to find lms with shutil.which
+            import shutil
+            lms_path = shutil.which("lms")
+            if lms_path:
+                result = run_subprocess([lms_path, "version"], timeout=10)
+                return result and result.returncode == 0
+            else:
+                # Fallback: try via shell with timeout
+                result = run_subprocess("lms version", timeout=10)
+                return result and result.returncode == 0
+        except Exception:
+            return False
+    
+    def check_lms_model_with_timeout(self):
+        """Check if Dolphin model is available with 10-second timeout."""
+        try:
+            result = run_subprocess("lms ls", timeout=10)
+            if result and result.returncode == 0 and result.stdout:
+                # Check if the Dolphin model is in the output
+                return "dolphin3.0-llama3.1-8b" in result.stdout.lower()
+            return False
+        except Exception:
+            return False
+
 class TikTokCreatorApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -196,7 +303,7 @@ class TikTokCreatorApp(QMainWindow):
         self.setup_settings_tab()
         
         # Check system requirements on startup
-        QTimer.singleShot(1000, self.check_system_requirements_popup)
+        QTimer.singleShot(1000, self.start_requirements_check)
         
         # Initialize variables
         self.process_running = False
@@ -1233,32 +1340,14 @@ class TikTokCreatorApp(QMainWindow):
         button_layout.addWidget(save_btn)
         layout.addLayout(button_layout)
 
-    def check_system_requirements_popup(self):
-        """Check system requirements and show a popup if any are missing."""
-        missing_requirements = []
-        
-        # Check CUDA
-        try:
-            if not check_cuda_installation():
-                missing_requirements.append("NVIDIA CUDA (for GPU acceleration)")
-        except Exception:
-            missing_requirements.append("NVIDIA CUDA (for GPU acceleration)")
-        
-        # Check LM Studio
-        try:
-            if not check_lms_installation():
-                missing_requirements.append("LM Studio (for AI text processing)")
-        except Exception:
-            missing_requirements.append("LM Studio (for AI text processing)")
-        
-        # Check Dolphin Model (only if LM Studio is available)
-        try:
-            if check_lms_installation() and not check_lms_model():
-                missing_requirements.append("Dolphin AI Model (for text generation)")
-        except Exception:
-            pass  # Skip model check if LM Studio isn't available
-        
-        # Show popup if requirements are missing
+    def start_requirements_check(self):
+        """Start the requirements check in a separate thread."""
+        self.requirements_checker = RequirementsCheckerWorker()
+        self.requirements_checker.requirements_checked.connect(self.show_requirements_popup)
+        self.requirements_checker.start()
+    
+    def show_requirements_popup(self, missing_requirements):
+        """Show popup with missing requirements or log success message."""
         if missing_requirements:
             message = "The following system requirements are missing:\n\n"
             for req in missing_requirements:
@@ -2794,11 +2883,11 @@ class TikTokCreatorApp(QMainWindow):
                 check=False
             )
             
-            if result.returncode != 0:
-                self.worker_thread.update_log.emit(f"Error collecting player data: {result.stderr}")
+            if result.returncode != 0: # pyright: ignore[reportAttributeAccessIssue]
+                self.worker_thread.update_log.emit(f"Error collecting player data: {result.stderr}") # pyright: ignore[reportAttributeAccessIssue]
                 return False
             
-            self.worker_thread.update_log.emit(result.stdout)
+            self.worker_thread.update_log.emit(result.stdout) # pyright: ignore[reportAttributeAccessIssue]
             self.worker_thread.update_log.emit("Player data collection completed successfully")
             return True
         except Exception as e:
