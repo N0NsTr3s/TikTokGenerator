@@ -16,6 +16,7 @@ import random
 import logging
 sys.path.append(os.path.dirname(__file__))
 from path_utils import find_project_root
+from helper import run_subprocess
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
@@ -99,8 +100,7 @@ class WorkerThread(QThread):
                 if process.poll() is None:  # Process is still running
                     import subprocess
                     from PySide6.QtCore import QMetaObject, Qt, Q_ARG
-                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)], 
-                                   capture_output=True)
+                    run_subprocess(['taskkill', '/F', '/T', '/PID', str(process.pid)])
             except Exception as e:
                 print(f"Error terminating process: {e}")
         
@@ -2498,9 +2498,9 @@ class TikTokCreatorApp(QMainWindow):
             self.worker_thread.update_log.emit("Running player data collection...")
             
             # Run the getdata.py script
-            result = subprocess.run(
+            result = run_subprocess(
                 [sys.executable, os.path.join("Minigames", "getdata.py")],
-                capture_output=True, text=True, check=False
+                check=False
             )
             
             if result.returncode != 0:
@@ -2667,3 +2667,4 @@ if __name__ == "__main__":
 
     window.show()
     sys.exit(app.exec())
+

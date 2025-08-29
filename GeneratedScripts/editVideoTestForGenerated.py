@@ -8,12 +8,13 @@ import argparse
 import re
 import gc
 import logging
+import shutil
 
 
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from helper import setup_script_logging
+from helper import setup_script_logging, run_subprocess
 # Configure logging
 
 logger = setup_script_logging('VideoProcessor')
@@ -33,7 +34,7 @@ if not os.path.isdir(image_dir):
     raise FileNotFoundError(f"Image directory not found: {image_dir}")
 
 # Locate audio directory (must be a subfolder of image_dir)
-audio_dir = os.path.join(image_dir, "audio")
+audio_dir = os.path.join(image_dir)
 logger.info(audio_dir)
 if not os.path.isdir(audio_dir):
     raise FileNotFoundError(f"Audio directory not found: {audio_dir}")
@@ -51,7 +52,19 @@ final_output = os.path.join(parent_dir,"ComfyUI","Output","final_video.mp4")
 
 # Define temporary directory for ffmpeg process
 temp_dir = os.path.join(image_dir, "temp_ffmpeg")
-os.makedirs(temp_dir, exist_ok=True)
+if os.path.exists(temp_dir):
+    logger.info(f"Cleaning existing temp dir: {temp_dir}")
+    for name in os.listdir(temp_dir):
+        path = os.path.join(temp_dir, name)
+        try:
+            if os.path.isfile(path) or os.path.islink(path):
+                os.remove(path)
+            elif os.path.isdir(path):
+                shutil.rmtree(path)
+        except Exception as e:
+            logger.warning(f"Failed to remove {path}: {e}")
+else:
+    os.makedirs(temp_dir, exist_ok=True)
 
 
 
@@ -104,7 +117,7 @@ def detect_hardware_encoder():
             continue  # Skip checking CPU
         try:
             cmd = ["ffmpeg", "-encoders"]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = run_subprocess(cmd)
             if config["encoder"] in result.stdout:
                 logger.info(f"{name.upper()} hardware encoder detected, using {config['encoder']}")
                 return config
@@ -153,7 +166,7 @@ def create_zoom_video(image_file, output_video, duration=10, fps=30, zoom_limit=
         output_video
     ]
     
-    subprocess.run(cmd, check=True)
+    run_subprocess(cmd, check=True)
     
 # Example usage:
 # create_zoom_video("image.jpg", "output_zoom.mp4", duration=10, fps=30, zoom_limit=1.5, resolution="1280x720")
@@ -180,7 +193,7 @@ logger.info(f"Found {len(audio_files)} audio files.")
 total_audio_duration = 0
 audio_durations = []
 for audio in audio_files:
-    result = subprocess.run([
+    result = run_subprocess([
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1", audio
     ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -267,7 +280,7 @@ ffmpeg_concat = [
     "-i", concat_list,
     "-c", "copy", temp_video
 ]
-subprocess.run(ffmpeg_concat, check=True)
+run_subprocess(ffmpeg_concat, check=True)
 logger.info("Concatenated clips into video: %s", temp_video)
 
 # Concatenate all audio files and add to the concatenated video
@@ -286,7 +299,7 @@ ffmpeg_audio_concat = [
     "-i", audio_concat_list,
     "-c", "copy", temp_audio_concat
 ]
-subprocess.run(ffmpeg_audio_concat, check=True)
+run_subprocess(ffmpeg_audio_concat, check=True)
 logger.info("Concatenated audio files: %s", temp_audio_concat)
 
 # Add the concatenated audio to the video
@@ -302,7 +315,7 @@ ffmpeg_audio = [
     "-shortest",
     temp_video_audio
 ]
-subprocess.run(ffmpeg_audio, check=True)
+run_subprocess(ffmpeg_audio, check=True)
 logger.info("Added audio to video: %s", temp_video_audio)
 
 # Generate an SRT subtitles file from your processed.txt using audio file durations
@@ -379,7 +392,7 @@ probe_cmd = [
     "-of", "csv=p=0", 
     temp_video_audio
 ]
-result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+result = run_subprocess(probe_cmd)
 dimensions = result.stdout.strip().split(',')
 width, height = int(dimensions[0]), int(dimensions[1])
 
@@ -398,7 +411,7 @@ ffmpeg_subs = [
     "-c:a", "copy",
     temp_video_subs
 ]
-subprocess.run(ffmpeg_subs, check=True)
+run_subprocess(ffmpeg_subs, check=True)
 logger.info("Burned subtitles into video: %s", temp_video_subs)
 
 
@@ -420,7 +433,7 @@ if args.add_minigame=="True":
     logger.info(f"Found {len(videos)} minigame videos")
     
     # Get main video duration
-    result = subprocess.run([
+    result = run_subprocess([
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1", temp_video_subs
     ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -433,7 +446,7 @@ if args.add_minigame=="True":
     
     for video in videos:
         # Get minigame video duration
-        result = subprocess.run([
+        result = run_subprocess([
             "ffprobe", "-v", "error", "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1", video
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -450,11 +463,9 @@ if args.add_minigame=="True":
             logger.error(f"ffprobe stderr: {result.stderr}")
             video_duration = 5.0  # Default duration if parsing fails
             logger.warning(f"Using default duration of {video_duration}s")
-        
         selected_videos.append((video, video_duration))
         total_minigame_duration += video_duration
         logger.info(f"Added minigame video: {video} ({video_duration:.2f}s)")
-        
         if total_minigame_duration >= main_video_duration:
             break
     
@@ -487,7 +498,7 @@ if args.add_minigame=="True":
         "-c", "copy",
         minigame_input
     ]
-    subprocess.run(ffmpeg_concat, check=True)
+    run_subprocess(ffmpeg_concat, check=True)
     logger.info(f"Created concatenated minigame video: {minigame_input}")
 
 # We'll use FFmpeg filter_complex to scale and stack videos vertically if minigame is added
@@ -503,7 +514,7 @@ if args.add_minigame=="True":
     # Remove the 'shortest' flag to use the full duration of both videos
     ffmpeg_stack = f'ffmpeg -y -i {temp_video_subs} -i {minigame_input} -filter_complex "[0:v]scale=1280:960[v0];[1:v]scale=1280:960[v1];[v0][v1]vstack=inputs=2[v]" -map "[v]" -map "0:a?" -c:v {encoder_name} -c:a aac -b:a 192k -t {main_video_duration} {final_temp}'
     
-    subprocess.run(ffmpeg_stack, check=True)
+    run_subprocess(ffmpeg_stack, check=True)
     logger.info("Stacked videos vertically into: %s", final_temp)
 else:
     logger.info("Using video with subtitles as final output (no minigame added)")
@@ -575,20 +586,24 @@ import shutil
 shutil.move(final_temp, final_output_path)
 logger.info(f"Final video moved to: {final_output_path}")
 
-for image in image_dir:
-    if image.lower().endswith('.png') and 'ComfyUITikTok' in image:
+# Delete PNG files from the image directory (use full paths)
+for filename in os.listdir(image_dir):
+    file_path = os.path.join(image_dir, filename)
+    if filename.lower().endswith('.png') and os.path.isfile(file_path):
         try:
-            os.remove(image)
-            logger.info(f"Deleted image file: {image}")
+            os.remove(file_path)
+            logger.info(f"Deleted image file: {file_path}")
         except Exception as e:
-            logger.warning(f"Failed to delete image file {image}: {str(e)}")
+            logger.warning(f"Failed to delete image file {file_path}: {str(e)}")
 logger.info("Cleared Image dir!")
 
-for audio in audio_dir:
-    if audio.lower().endswith('.wav') and 'openaifm' in audio:
+# Delete WAV files from the audio directory (audio_dir may be same as image_dir)
+for filename in os.listdir(audio_dir):
+    file_path = os.path.join(audio_dir, filename)
+    if filename.lower().endswith('.wav') and os.path.isfile(file_path):
         try:
-            os.remove(audio)
-            logger.info(f"Deleted image file: {audio}")
+            os.remove(file_path)
+            logger.info(f"Deleted audio file: {file_path}")
         except Exception as e:
-            logger.warning(f"Failed to delete image file {audio}: {str(e)}")
+            logger.warning(f"Failed to delete audio file {file_path}: {str(e)}")
 logger.info("Cleared Audio dir!")

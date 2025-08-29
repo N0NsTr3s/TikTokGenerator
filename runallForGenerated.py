@@ -7,7 +7,7 @@ import os
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from helper import setup_script_logging
+from helper import setup_script_logging, run_subprocess
 # Configure logging
 
 logger = setup_script_logging('RunAll')
@@ -30,7 +30,7 @@ games = [r"Minigames\game.py", r"Minigames\circlegame.py"]
 
 # Run recordgame.py at the same time
 def run_record_game():
-    subprocess.run(["python", "Minigames/recordgame.py"])
+    run_subprocess(["python", "Minigames/recordgame.py"])
 
 parser = argparse.ArgumentParser(description='Run a series of scripts in sequence.')
 parser.add_argument('first_script', nargs='?', default=r"GeneratedScripts\generated_script.py",
@@ -83,6 +83,6 @@ scripts.append(r"GeneratedScripts\postForGenerated.py")
 logger.info("Finished running scripts. Posting the video")
 for script in scripts:
     if isinstance(script, list):
-        subprocess.run(script)
+        run_subprocess(script)
     else:
-        subprocess.run(["python"] + script.split())
+        run_subprocess(["python"] + script.split())

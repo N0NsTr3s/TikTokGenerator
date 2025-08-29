@@ -8,10 +8,11 @@ import sys
 from googletrans import Translator
 import asyncio
 import subprocess
+from helper import run_subprocess
 client = OpenAI(base_url='http://localhost:1234/v1', api_key="Nothing here")
 
-subprocess.run("lms server start")
-subprocess.run("lms load cognitivecomputations/Dolphin3.0-Llama3.1-8B-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
+run_subprocess("lms server start")
+run_subprocess("lms load cognitivecomputations/Dolphin3.0-Llama3.1-8B-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
 def analyze_text_content(text, url):
     print(f"Analyzing text from: {url}")
     # Extract the source: the substring after "https://" until the first "."
@@ -254,5 +255,5 @@ if __name__ == "__main__":
             file.write(f"{translated_query} ?\n\n{final_output}")
     except Exception as e:
         print(f"An error occurred while editing processed.txt: {e}")
-    subprocess.run("lms unload --all")
-    subprocess.run("lms server stop")
+    run_subprocess("lms unload --all")
+    run_subprocess("lms server stop")

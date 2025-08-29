@@ -7,7 +7,12 @@ loads the `openaifm.py` module from the ComfyUI custom node and calls OPENAIFM.g
 import argparse
 import subprocess
 import sys
+import os
 from pathlib import Path
+
+# Add parent directory to path to import helper
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from helper import run_subprocess
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -104,7 +109,7 @@ def call_openai_tts(text, voice, vibe=None):
         cmd.extend(["--vibe", vibe])
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = run_subprocess(cmd, check=True)
         print("TTS generation successful!")
         if result.stdout:
             print(result.stdout)

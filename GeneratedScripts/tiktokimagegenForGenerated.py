@@ -9,7 +9,7 @@ import subprocess
 import argparse
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from helper import setup_script_logging
+from helper import setup_script_logging, run_subprocess
 
 parser=argparse.ArgumentParser(description='Run a series of scripts in sequence.')
 parser.add_argument('--add-minigame', choices=['True', 'False'], default='False', help='Modify the hight of the picture if there is a minigame or not in the video (True/False)')
@@ -94,7 +94,7 @@ try:
     logger.info("parsetextForGenerated.py executed successfully")
 except:
     logger.info("Running parsetextForGenerated.py directly failed. Subrunning it now.")
-    subprocess.run(["python", "GeneratedScripts\\parsetextForGenerated.py"])
+    run_subprocess(["python", "GeneratedScripts\\parsetextForGenerated.py"])
 
 from nodes import (
     SaveImage,

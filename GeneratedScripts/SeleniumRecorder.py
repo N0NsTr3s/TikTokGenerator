@@ -15,6 +15,12 @@ from webdriver_manager.chrome import ChromeDriverManager
 from pprint import pprint
 import asyncio
 import threading
+import subprocess
+import sys
+
+# Add parent directory to path to import helper
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from helper import run_subprocess
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -46,6 +52,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import undetected_chromedriver as uc
 from webdriver_manager.chrome import ChromeDriverManager
+from helper import run_subprocess
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -191,8 +198,8 @@ def parse_with_AI():
 
     time.sleep(10)
     client = OpenAI(base_url='http://localhost:1234/v1', api_key="Nothing here")
-    subprocess.run("lms server start")
-    subprocess.run("lms load roleplaiapp/Dolphin3.0-Llama3.1-8B-Q3_K_S-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
+    run_subprocess("lms server start")
+    run_subprocess("lms load cognitivecomputations/Dolphin3.0-Llama3.1-8B-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
 
 
     def estimate_tokens(text):
@@ -253,8 +260,8 @@ def parse_with_AI():
         final_result = analyze_text_content(text)
         print(final_result)
         
-    subprocess.run("lms unload --all")
-    subprocess.run("lms server stop")
+    run_subprocess("lms unload --all")
+    run_subprocess("lms server stop")
 
     with open("processed.txt", "w", encoding="utf-8") as f:
         f.write(final_result)
@@ -1258,5 +1265,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     main()

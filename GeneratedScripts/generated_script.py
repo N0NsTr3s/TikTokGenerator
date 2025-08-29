@@ -1,3 +1,4 @@
+# filepath: D:\ComfyUI_windows_portable\TikTokCreator\GeneratedScripts\generated_script.py
 # Generated script from SeleniumRecorder
 import time
 import json
@@ -105,8 +106,7 @@ def run_scraper():
     options.add_argument("--start-maximized")
     
     # Use your default Chrome profile
-    localappdata = os.getenv("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
-    user_data_dir = os.path.join(localappdata, "Google", "Chrome", "User Data", "Profile 1")
+    user_data_dir = 'C:\\Users\\Edi\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 1'
     options.add_argument(f"--user-data-dir={user_data_dir}")
     
     # Initialize the Chrome driver
@@ -215,20 +215,30 @@ def run_scraper():
         with open(links_file, "w") as f:
             f.write("\n".join(clicked_links))
 
-            
+
+
+
+
+
 def parse_with_AI():
     from openai import OpenAI
     import subprocess
     import json
     import time
+    import sys
+    import os
+    
+    # Add parent directory to path to import helper
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from helper import run_subprocess
 
     with open("scraped_data.json", "r") as f:
         data = json.load(f)
 
     time.sleep(10)
     client = OpenAI(base_url='http://localhost:1234/v1', api_key="Nothing here")
-    subprocess.run("lms server start")
-    subprocess.run("lms load roleplaiapp/Dolphin3.0-Llama3.1-8B-Q3_K_S-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
+    run_subprocess("lms server start")
+    run_subprocess("lms load roleplaiapp/Dolphin3.0-Llama3.1-8B-Q3_K_S-GGUF/Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf --context-length 8096 --gpu max")
 
     def estimate_tokens(text):
         # Estimate tokens by counting words
@@ -287,7 +297,6 @@ def parse_with_AI():
             results.append(result)
         
         # Combine results
-        
         final_result = " ".join(results)
         print(final_result)
     else:
@@ -295,11 +304,11 @@ def parse_with_AI():
         final_result = analyze_text_content(text)
         print(final_result)
         
-    subprocess.run("lms unload --all")
-    subprocess.run("lms server stop")
+    run_subprocess("lms unload --all")
+    run_subprocess("lms server stop")
 
     with open("processed.txt", "w", encoding="utf-8") as f:
-        f.write(final_result or "")
+        f.write(str(final_result))
     print(f"Results written to processed.txt")
 
 
