@@ -119,7 +119,7 @@ def install_lms():
         logger.info("Starting LM Studio installation...")
         
         # Download LM Studio installer
-        url = "https://releases.lmstudio.ai/windows/x86/0.2.29/LM-Studio-0.2.29-Setup.exe"
+        url = "https://installers.lmstudio.ai/win32/x64/0.3.24-6/LM-Studio-0.3.24-6-x64.exehttps://installers.lmstudio.ai/win32/x64/0.3.24-6/LM-Studio-0.3.24-6-x64.exe"
         
         with tempfile.TemporaryDirectory() as temp_dir:
             installer_path = Path(temp_dir) / "lmstudio_installer.exe"
@@ -151,7 +151,7 @@ def install_lms_model():
         
         # Download the model
         proc = subprocess.Popen(
-            ["lms", "get", "Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf"],
+            ["lms", "get", "Dolphin3.0-Llama3.1-8B-Q3_K_S.gguf", "-y"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
