@@ -16,6 +16,16 @@ from pprint import pprint
 import asyncio
 import threading
 import subprocess
+import sys
+import os
+
+# Ensure the package directory (TikTokGenerator) is on sys.path so local imports like
+# `from helper import run_subprocess` work whether the script is run from the
+# workspace root or from inside the TikTokGenerator folder.
+_this_dir = os.path.dirname(__file__)
+if _this_dir and _this_dir not in sys.path:
+    sys.path.insert(0, _this_dir)
+
 from helper import run_subprocess
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -49,13 +59,21 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import undetected_chromedriver as uc
 from webdriver_manager.chrome import ChromeDriverManager
-from helper import run_subprocess
+import sys
+
+# Ensure the package directory (TikTokGenerator) is on sys.path so local imports like
+# `from helper import run_subprocess` work whether the script is run from the
+# workspace root or from inside the TikTokGenerator folder.
+_this_dir = os.path.dirname(__file__)
+if _this_dir and _this_dir not in sys.path:
+    sys.path.insert(0, _this_dir)
+from helper import run_subprocess, ensure_lmstudio_http_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-
+ensure_lmstudio_http_config()
 
 def safe_click(driver, element, max_attempts=3):
     \"\"\"Safely click an element, handling intercepted clicks.\"\"\"

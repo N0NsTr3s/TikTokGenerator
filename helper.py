@@ -3,6 +3,8 @@ import logging
 import sys
 import subprocess
 import shutil
+import json
+from pathlib import Path
 
 def run_subprocess(cmd, **kwargs):
     """Run a subprocess without creating a window on Windows and log output.
@@ -119,7 +121,7 @@ def install_lms():
         logger.info("Starting LM Studio installation...")
         
         # Download LM Studio installer
-        url = "https://installers.lmstudio.ai/win32/x64/0.3.24-6/LM-Studio-0.3.24-6-x64.exehttps://installers.lmstudio.ai/win32/x64/0.3.24-6/LM-Studio-0.3.24-6-x64.exe"
+        url = "https://installers.lmstudio.ai/win32/x64/0.3.24-6/LM-Studio-0.3.24-6-x64.exe"
         
         with tempfile.TemporaryDirectory() as temp_dir:
             installer_path = Path(temp_dir) / "lmstudio_installer.exe"
@@ -193,3 +195,48 @@ def setup_script_logging(name):
         )
     
     return logger
+
+
+def ensure_lmstudio_http_config(defaults: dict | None = None) -> Path:
+    """Ensure LM Studio http-server-config.json exists under the user's home directory.
+
+    The function does not hardcode an absolute path. It builds the path from the
+    current user's home directory: ~/.lmstudio/.internal/http-server-config.json
+
+    If the file does not exist, the parent directories are created and the file
+    is written with the provided defaults (or with built-in defaults).
+
+    Returns the Path to the config file.
+    """
+    logger = logging.getLogger('lms_config')
+
+    if defaults is None:
+        defaults = {
+            "autoStartOnLaunch": False,
+            "port": 1234,
+            "cors": False,
+            "logSensitiveData": True,
+            "logIncomingTokens": False,
+            "verbose": False,
+            "logLinesLimit": 500,
+            "networkInterface": "127.0.0.1",
+            "justInTimeModelLoading": True,
+            "fileLoggingMode": "succinct"
+        }
+
+    home = Path.home()
+    config_path = home / '.lmstudio' / '.internal' / 'http-server-config.json'
+
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        if not config_path.exists():
+            with config_path.open('w', encoding='utf-8') as f:
+                json.dump(defaults, f, indent=2)
+            logger.info(f"Created LM Studio http config: {config_path}")
+        else:
+            logger.debug(f"LM Studio http config already exists: {config_path}")
+    except Exception as e:
+        logger.error(f"Failed to ensure LM Studio http config at {config_path}: {e}")
+        raise
+
+    return config_path
